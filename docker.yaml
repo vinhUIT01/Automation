@@ -1,0 +1,55 @@
+# docker-cis-hardening.yml
+---
+- name: Docker CIS Hardening
+  hosts: docker
+  become: yes
+
+  tasks:
+    - name: Configure Docker daemon
+      copy:
+        content: |
+          {
+            "icc": false,
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            },
+            "live-restore": true,
+            "userland-proxy": false,
+            "no-new-privileges": true
+          }
+        dest: /etc/docker/daemon.json
+        mode: '0644'
+      notify: Restart Docker
+
+    - name: Set Docker socket permissions
+      file:
+        path: /var/run/docker.sock
+        owner: root
+        group: docker
+        mode: '0660'
+
+    - name: Enable audit rules for Docker
+      copy:
+        content: |
+          -w /usr/bin/dockerd -k docker
+          -w /var/lib/docker -k docker
+          -w /etc/docker -k docker
+          -w /usr/lib/systemd/system/docker.service -k docker
+          -w /usr/lib/systemd/system/docker.socket -k docker
+          -w /etc/default/docker -k docker
+          -w /etc/docker/daemon.json -k docker
+          -w /usr/bin/containerd -k docker
+          -w /usr/bin/runc -k docker
+        dest: /etc/audit/rules.d/docker.rules
+      notify: Reload audit rules
+
+  handlers:
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+    - name: Reload audit rules
+      command: auditctl -R /etc/audit/rules.d/docker.rules
