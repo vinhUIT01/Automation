@@ -6,7 +6,7 @@
 
   tasks:
     - name: Configure Docker daemon
-      copy:
+      ansible.builtin.copy:
         content: |
           {
             "icc": false,
@@ -24,32 +24,44 @@
       notify: Restart Docker
 
     - name: Set Docker socket permissions
-      file:
+      ansible.builtin.file:
         path: /var/run/docker.sock
         owner: root
         group: docker
         mode: '0660'
 
     - name: Enable audit rules for Docker
-      copy:
+      ansible.builtin.copy:
         content: |
           -w /usr/bin/dockerd -k docker
-          -w /var/lib/docker -k docker
+          -a exit,always -F path=/run/containerd -F perm=war -k docker
+          -a exit,always -F path=/var/lib/docker -F perm=war -k docker
           -w /etc/docker -k docker
           -w /usr/lib/systemd/system/docker.service -k docker
-          -w /usr/lib/systemd/system/docker.socket -k docker
+          -w /run/containerd/containerd.sock -k docker
+          -w /lib/systemd/system/docker.socket -k docker
           -w /etc/default/docker -k docker
           -w /etc/docker/daemon.json -k docker
-          -w /usr/bin/containerd -k docker
+          -w /etc/containerd/config.toml -k docker
+          -w /usr/bin/containerd-shim-runc-v2 -k docker
           -w /usr/bin/runc -k docker
+
         dest: /etc/audit/rules.d/docker.rules
       notify: Reload audit rules
 
+    - name: Install lynis
+      ansible.builtin.apt:
+        name:
+          - lynis
+        state: unin
+
   handlers:
     - name: Restart Docker
-      service:
+      ansible.builtin.service:
         name: docker
         state: restarted
 
     - name: Reload audit rules
-      command: auditctl -R /etc/audit/rules.d/docker.rules
+      ansible.builtin.service:
+        name: auditd
+        state: restarted
