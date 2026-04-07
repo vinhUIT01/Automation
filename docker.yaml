@@ -53,7 +53,7 @@
       ansible.builtin.apt:
         name:
           - lynis
-        state: unin
+        state: present
 
   handlers:
     - name: Restart Docker
