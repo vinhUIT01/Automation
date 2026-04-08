@@ -71,9 +71,10 @@
       ansible.builtin.copy:
         content: "{{ audit_std_out.stdout }}"
         dest: lynis_audit.txt
+        mode: 644
       delegate_to: localhost
       become: false
-    
+
     - name: Update Docker
       ansible.builtin.apt:
         name:
@@ -86,6 +87,10 @@
         only_upgrade: true
 # SECTION 6
 
+    - name: Ensure that image sprawl is avoided
+      ansible.builtin.command:
+        cmd: docker system prune -a
+
   handlers:
     - name: Restart Docker
       ansible.builtin.service:
@@ -96,3 +101,4 @@
       ansible.builtin.service:
         name: auditd
         state: restarted
+...
