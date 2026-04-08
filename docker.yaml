@@ -2,7 +2,7 @@
 ---
 - name: Docker CIS Hardening
   hosts: docker
-  become: yes
+  become: true
 
   tasks:
     - name: Install auditd
@@ -52,7 +52,7 @@
           -w /etc/containerd/config.toml -k docker
           -w /usr/bin/containerd-shim-runc-v2 -k docker
           -w /usr/bin/runc -k docker
-
+        mode: "0644"
         dest: /etc/audit/rules.d/docker.rules
       notify: Reload audit rules
 
@@ -66,12 +66,12 @@
       ansible.builtin.command:
         cmd: lynis audit system
       register: audit_std_out
-    
+
     - name: Save host OS audit
       ansible.builtin.copy:
         content: "{{ audit_std_out.stdout }}"
         dest: lynis_audit.txt
-        mode: 644
+        mode: "0644"
       delegate_to: localhost
       become: false
 
