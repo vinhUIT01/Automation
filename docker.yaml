@@ -89,7 +89,11 @@
 
     - name: Ensure that image sprawl is avoided
       ansible.builtin.command:
-        cmd: docker system prune -a
+        cmd: docker system prune -a -f
+
+    - name: Ensure that image sprawl is avoided
+      ansible.builtin.command:
+        cmd: docker container prune -f
 
   handlers:
     - name: Restart Docker
