@@ -72,8 +72,8 @@
 [6C- Checking /snap/lxd/38800 on /var/lib/snapd/snaps/lxd_38800.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /snap/snapd/25935 on /var/lib/snapd/snaps/snapd_25935.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /snap/snapd/26382 on /var/lib/snapd/snaps/snapd_26382.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
-[6C- Checking /var/lib/docker on /dev/sdb[17C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /boot/efi on /dev/sda15[21C [ [1;37mNOT ENCRYPTED[0m ]
+[6C- Checking /var/lib/docker on /dev/sdb[17C [ [1;37mNOT ENCRYPTED[0m ]
 [2C- Software:[48C
 [4C- apt-listbugs[43C [ [1;31mNot Installed[0m ]
 [4C- apt-listchanges[40C [ [1;31mNot Installed[0m ]
@@ -408,7 +408,7 @@
 ------------------------------------
 [2C- NTP daemon found: systemd (timesyncd)[20C [ [1;32mFOUND[0m ]
 [2C- Checking for a running NTP daemon or client[14C [ [1;32mOK[0m ]
-[2C- Last time synchronization[32C [ [1;32m1531s[0m ]
+[2C- Last time synchronization[32C [ [1;32m503s[0m ]
 
 [+] [1;33mCryptography[0m
 ------------------------------------
@@ -435,7 +435,7 @@
 ------------------------------------
 [2C- Checking presence AppArmor[31C [ [1;32mFOUND[0m ]
 [4C- Checking AppArmor status[31C [ [1;32mENABLED[0m ]
-[8CFound 45 unconfined processes[24C
+[8CFound 40 unconfined processes[24C
 [2C- Checking presence SELinux[32C [ [1;32mFOUND[0m ]
 [4C- Checking SELinux status[32C [ [1;33mDISABLED[0m ]
 [2C- Checking presence TOMOYO Linux[27C [ [1;37mNOT FOUND[0m ]

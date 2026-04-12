@@ -3,13 +3,14 @@
 - name: Docker CIS Hardening
   hosts: docker
   become: true
-
   tasks:
     - name: Install auditd
       ansible.builtin.apt:
         name:
           - auditd
+          - audispd-plugins
         state: present
+
     - name: Configure Docker daemon
       ansible.builtin.copy:
         content: |
@@ -22,8 +23,7 @@
             },
             "live-restore": true,
             "userland-proxy": false,
-            "no-new-privileges": true,
-            "selinux-enabled": true
+            "no-new-privileges": true
           }
         dest: /etc/docker/daemon.json
         mode: '0644'
@@ -36,24 +36,25 @@
         group: docker
         mode: '0660'
 
-#   SECTION 1
-    - name: Enable audit rules for Docker
+#   SECTION 1 - Audit Rules
+    - name: Enable audit rules for Docker (CIS 1.1.3 - 1.1.18)
       ansible.builtin.copy:
         content: |
-          -w /usr/bin/dockerd -k docker
-          -a exit,always -F path=/run/containerd -F perm=war -k docker
-          -a exit,always -F path=/var/lib/docker -F perm=war -k docker
-          -w /etc/docker -k docker
-          -w /usr/lib/systemd/system/docker.service -k docker
-          -w /run/containerd/containerd.sock -k docker
-          -w /lib/systemd/system/docker.socket -k docker
-          -w /etc/default/docker -k docker
-          -w /etc/docker/daemon.json -k docker
-          -w /etc/containerd/config.toml -k docker
-          -w /usr/bin/containerd-shim-runc-v2 -k docker
-          -w /usr/bin/runc -k docker
-        mode: "0644"
+          -w /usr/bin/dockerd -p rwxa -k docker
+          -w /run/containerd -p rwxa -k docker
+          -w /var/lib/docker -p rwxa -k docker
+          -w /etc/docker -p rwxa -k docker
+          -w /usr/lib/systemd/system/docker.service -p rwxa -k docker
+          -w /run/containerd/containerd.sock -p rwxa -k docker
+          -w /lib/systemd/system/docker.socket -p rwxa -k docker
+          -w /etc/default/docker -p rwxa -k docker
+          -w /etc/docker/daemon.json -p rwxa -k docker
+          -w /etc/containerd/config.toml -p rwxa -k docker
+          -w /usr/bin/containerd -p rwxa -k docker
+          -w /usr/bin/containerd-shim-runc-v2 -p rwxa -k docker
+          -w /usr/bin/runc -p rwxa -k docker
         dest: /etc/audit/rules.d/docker.rules
+        mode: '0640'
       notify: Reload audit rules
 
     - name: Install lynis
@@ -61,7 +62,7 @@
         name:
           - lynis
         state: present
-    
+
     - name: Run host OS audit
       ansible.builtin.command:
         cmd: lynis audit system
@@ -71,7 +72,7 @@
       ansible.builtin.copy:
         content: "{{ audit_std_out.stdout }}"
         dest: lynis_audit.txt
-        mode: "0644"
+        mode: '0644'
       delegate_to: localhost
       become: false
 
@@ -85,13 +86,13 @@
           - docker-compose-plugin
         state: latest
         only_upgrade: true
-# SECTION 6
 
-    - name: Ensure that image sprawl is avoided
+#   SECTION 6 - Image Sprawl
+    - name: Prune unused Docker images
       ansible.builtin.command:
         cmd: docker system prune -a -f
 
-    - name: Ensure that image sprawl is avoided
+    - name: Prune stopped containers
       ansible.builtin.command:
         cmd: docker container prune -f
 
@@ -102,7 +103,5 @@
         state: restarted
 
     - name: Reload audit rules
-      ansible.builtin.service:
-        name: auditd
-        state: restarted
-...
+      ansible.builtin.command:
+        cmd: augenrules --load
