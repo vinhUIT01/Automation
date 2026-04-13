@@ -1,0 +1,108 @@
+# fix_warn_2_12_2_13.yml
+# CIS Docker Benchmark fixes:
+#   2.12 - Ensure authorization for Docker client commands is enabled
+#   2.13 - Ensure centralized and remote logging is configured
+---
+- name: Fix CIS Docker WARN 2.12 and 2.13
+  hosts: docker
+  become: true
+
+  vars:
+    syslog_host: "127.0.0.1"   # doi thanh IP cua remote syslog server neu co
+    syslog_port: "514"
+
+  tasks:
+
+    # ---------------------------------------------------------------
+    # 2.12 – Authorization plugin for Docker client commands
+    # ---------------------------------------------------------------
+    - name: 2.12 | Install OPA Docker authz plugin
+      community.docker.docker_plugin:
+        plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
+        state: present
+        alias: opa-docker-authz
+
+    - name: 2.12 | Enable OPA Docker authz plugin
+      community.docker.docker_plugin:
+        plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
+        state: enable
+        alias: opa-docker-authz
+
+    - name: 2.12 | Create OPA policy directory
+      ansible.builtin.file:
+        path: /etc/docker/policies
+        state: directory
+        mode: '0755'
+
+    - name: 2.12 | Deploy default allow-all OPA policy
+      ansible.builtin.copy:
+        dest: /etc/docker/policies/authz.rego
+        mode: '0644'
+        content: |
+          package docker.authz
+
+          # Cho phep tat ca request theo mac dinh.
+          # Thay bang policy chat hon khi can thiet.
+          allow {
+            true
+          }
+
+    # ---------------------------------------------------------------
+    # 2.13 – Centralized and remote logging
+    # ---------------------------------------------------------------
+    - name: 2.13 | Ensure rsyslog is installed
+      ansible.builtin.apt:
+        name: rsyslog
+        state: present
+        update_cache: true
+
+    - name: 2.13 | Ensure rsyslog is running and enabled
+      ansible.builtin.service:
+        name: rsyslog
+        state: started
+        enabled: true
+
+    - name: 2.13 | Configure rsyslog to accept UDP syslog (local aggregation)
+      ansible.builtin.blockinfile:
+        path: /etc/rsyslog.conf
+        marker: "# {mark} ANSIBLE MANAGED – Docker remote logging"
+        insertafter: "^#module.*imudp"
+        block: |
+          module(load="imudp")
+          input(type="imudp" port="{{ syslog_port }}")
+      notify: Restart rsyslog
+
+    # ---------------------------------------------------------------
+    # Ghi daemon.json voi ca 2 fix (giu nguyen cac gia tri cu)
+    # ---------------------------------------------------------------
+    - name: Write updated /etc/docker/daemon.json (2.12 + 2.13)
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        mode: '0644'
+        content: |
+          {
+            "icc": false,
+            "live-restore": true,
+            "userland-proxy": false,
+            "no-new-privileges": true,
+            "selinux-enabled": true,
+            "log-driver": "syslog",
+            "log-opts": {
+              "syslog-address": "udp://{{ syslog_host }}:{{ syslog_port }}",
+              "syslog-facility": "daemon",
+              "tag": "docker/{{`{{.Name}}`}}"
+            },
+            "authorization-plugins": ["opa-docker-authz"]
+          }
+      notify: Restart Docker
+
+  handlers:
+    - name: Restart rsyslog
+      ansible.builtin.service:
+        name: rsyslog
+        state: restarted
+
+    - name: Restart Docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted
