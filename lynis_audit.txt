@@ -66,11 +66,11 @@
 [6C- Checking / on /dev/sda1[30C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /snap/core20/2686 on /var/lib/snapd/snaps/core20_2686.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /snap/core20/2769 on /var/lib/snapd/snaps/core20_2769.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
-[6C- Checking /snap/core22/2411 on /var/lib/snapd/snaps/core22_2411.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
-[6C- Checking /snap/ip-address/6 on /var/lib/snapd/snaps/ip-address_6.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
-[6C- Checking /snap/lxd/38469 on /var/lib/snapd/snaps/lxd_38469.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
-[6C- Checking /snap/lxd/38800 on /var/lib/snapd/snaps/lxd_38800.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /snap/snapd/25935 on /var/lib/snapd/snaps/snapd_25935.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
+[6C- Checking /snap/lxd/38800 on /var/lib/snapd/snaps/lxd_38800.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
+[6C- Checking /snap/ip-address/6 on /var/lib/snapd/snaps/ip-address_6.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
+[6C- Checking /snap/core22/2411 on /var/lib/snapd/snaps/core22_2411.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
+[6C- Checking /snap/lxd/38469 on /var/lib/snapd/snaps/lxd_38469.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /snap/snapd/26382 on /var/lib/snapd/snaps/snapd_26382.snap[0C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /boot/efi on /dev/sda15[21C [ [1;37mNOT ENCRYPTED[0m ]
 [6C- Checking /var/lib/docker on /dev/sdb[17C [ [1;37mNOT ENCRYPTED[0m ]
@@ -150,7 +150,7 @@
 [2C- Checking kernel version and release[22C [ [1;32mDONE[0m ]
 [2C- Checking kernel type[37C [ [1;32mDONE[0m ]
 [2C- Checking loaded kernel modules[27C [ [1;32mDONE[0m ]
-[6CFound 79 active modules[32C
+[6CFound 82 active modules[32C
 [2C- Checking Linux kernel configuration file[17C [ [1;32mFOUND[0m ]
 [2C- Checking default I/O kernel scheduler[20C [ [1;37mNOT FOUND[0m ]
 [2C- Checking for available kernel update[21C [ [1;32mOK[0m ]
@@ -408,7 +408,7 @@
 ------------------------------------
 [2C- NTP daemon found: systemd (timesyncd)[20C [ [1;32mFOUND[0m ]
 [2C- Checking for a running NTP daemon or client[14C [ [1;32mOK[0m ]
-[2C- Last time synchronization[32C [ [1;32m503s[0m ]
+[2C- Last time synchronization[32C [ [1;32m428s[0m ]
 
 [+] [1;33mCryptography[0m
 ------------------------------------

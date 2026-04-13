@@ -1,0 +1,67 @@
+---
+- name: Launch a Docker container with Ansible
+  hosts: docker
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3.10   
+    container_name: my_container
+    image_name: nginx:latest
+    published_port: "127.0.0.1:8080:80" #needed port 80
+
+  tasks:
+    - name: Check Docker installed
+      ansible.builtin.package:
+        name: docker
+        state: present
+
+    - name: Check service running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true                                 
+
+    - name: Pull Docker image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        source: pull
+        force_source: true # pull source latest nhat
+    
+    - name: Create persistent secure-net Docker network
+      community.docker.docker_network:
+        name: secure-net
+        driver: bridge
+        driver_options:
+          com.docker.network.bridge.enable_icc:           "false"
+          com.docker.network.bridge.enable_ip_masquerade: "true"
+        state: present
+
+    - name: Run Docker container                    
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        detach: true
+        published_ports:
+          - "{{ published_port }}"
+        restart_policy: unless-stopped
+        memory:        "256m"
+        cpu_shares:    512
+        pids_limit:    100
+        read_only:     true
+        network_mode:  "secure-net"
+        security_opts: ["label=level:TopSecret"]
+        ulimits: "nofile:1024:1024"
+        healthcheck:
+          test: ["CMD", "curl", "--fail", "http://nginx.host.com"]
+          interval: 1m30s
+          timeout: 10s
+          retries: 3
+          start_period: 30s
+          start_interval: 10s
+        
+        tmpfs:
+          - "/var/cache/nginx:rw,noexec,nosuid,size=64m"
+          - "/var/run:rw,noexec,nosuid,size=8m"
+          - "/tmp:rw,noexec,nosuid,size=32m"
+          - "/etc/nginx/conf.d:rw,noexec,nosuid,size=8m"
+
