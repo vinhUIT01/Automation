@@ -52,7 +52,7 @@
           -w /etc/containerd/config.toml -k docker
           -w /usr/bin/containerd-shim-runc-v2 -k docker
           -w /usr/bin/runc -k docker
-        mode: "0644"
+        mode: "0644"  
         dest: /etc/audit/rules.d/docker.rules
       notify: Reload audit rules
 
@@ -102,7 +102,6 @@
         state: restarted
 
     - name: Reload audit rules
-      ansible.builtin.service:
-        name: auditd
-        state: restarted
+      ansible.builtin.command:
+        cmd: augenrules --load
 ...
