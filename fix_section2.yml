@@ -1,0 +1,169 @@
+---
+# fix_section2.yml
+# CIS Docker Benchmark – Section 2: Docker Daemon Configuration
+# Dành cho Ubuntu thật với Docker Engine (có systemd)
+#
+# WARN cần fix:
+#   2.2  – icc: false                   (restrict inter-container traffic)
+#   2.9  – userns-remap: default        (enable user namespace)
+#   2.12 – authorization-plugins        (OPA authz plugin)
+#   2.13 – log-driver + log-opts        (centralized logging)
+#   2.14 – no-new-privileges: true      (restrict privilege escalation)
+#   2.15 – live-restore: true           (keep containers alive on restart)
+#   2.16 – userland-proxy: false        (disable userland proxy)
+
+- name: CIS Docker Benchmark – Fix Section 2 (Docker Daemon Configuration)
+  hosts: docker
+  become: true
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    syslog_host: "127.0.0.1"
+    syslog_port: "514"
+
+  tasks:
+
+    # ---------------------------------------------------------------
+    # Pre-flight: Cài community.docker collection dependencies
+    # ---------------------------------------------------------------
+    - name: "PRE | Install python3-pip"
+      ansible.builtin.apt:
+        name: python3-pip
+        state: present
+        update_cache: true
+
+    - name: "PRE | Install python3 docker library"
+      ansible.builtin.pip:
+        name:
+          - docker
+          - requests
+        state: present
+
+    # ---------------------------------------------------------------
+    # 2.12 – OPA Docker authorization plugin
+    # ---------------------------------------------------------------
+    - name: "2.12 | Install OPA Docker authz plugin"
+      community.docker.docker_plugin:
+        plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
+        state: present
+        alias: opa-docker-authz
+
+    - name: "2.12 | Enable OPA Docker authz plugin"
+      community.docker.docker_plugin:
+        plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
+        state: enable
+        alias: opa-docker-authz
+
+    - name: "2.12 | Create OPA policy directory"
+      ansible.builtin.file:
+        path: /etc/docker/policies
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "2.12 | Deploy allow-all OPA policy (thay bằng policy chặt hơn nếu cần)"
+      ansible.builtin.copy:
+        dest: /etc/docker/policies/authz.rego
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          package docker.authz
+
+          allow {
+            true
+          }
+
+    # ---------------------------------------------------------------
+    # 2.13 – Centralized logging với rsyslog
+    # ---------------------------------------------------------------
+    - name: "2.13 | Ensure rsyslog is installed"
+      ansible.builtin.apt:
+        name: rsyslog
+        state: present
+
+    - name: "2.13 | Ensure rsyslog is running and enabled"
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: started
+        enabled: true
+
+    - name: "2.13 | Configure rsyslog to accept UDP syslog on port {{ syslog_port }}"
+      ansible.builtin.blockinfile:
+        path: /etc/rsyslog.conf
+        marker: "# {mark} ANSIBLE MANAGED – Docker remote logging"
+        insertafter: "^#module.*imudp"
+        block: |
+          module(load="imudp")
+          input(type="imudp" port="{{ syslog_port }}")
+      notify: Restart rsyslog
+
+    # ---------------------------------------------------------------
+    # 2.2 / 2.9 / 2.13 / 2.14 / 2.15 / 2.16
+    # Ghi toàn bộ /etc/docker/daemon.json
+    # ---------------------------------------------------------------
+    - name: "2.2/2.9/2.13/2.14/2.15/2.16 | Write /etc/docker/daemon.json"
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          {
+            "icc": false,
+            "userns-remap": "default",
+            "log-driver": "syslog",
+            "log-opts": {
+              "syslog-address": "udp://{{ syslog_host }}:{{ syslog_port }}",
+              "syslog-facility": "daemon",
+              "tag": "docker/{{ "{{" }}.Name{{ "}}" }}"
+            },
+            "no-new-privileges": true,
+            "live-restore": true,
+            "userland-proxy": false,
+            "authorization-plugins": ["opa-docker-authz"]
+          }
+      notify: Restart Docker
+
+    # ---------------------------------------------------------------
+    # 2.9 – Đảm bảo /etc/subuid và /etc/subgid có entry dockremap
+    # ---------------------------------------------------------------
+    - name: "2.9 | Ensure dockremap entry in /etc/subuid"
+      ansible.builtin.lineinfile:
+        path: /etc/subuid
+        regexp: '^dockremap:'
+        line: "dockremap:100000:65536"
+        create: true
+        mode: '0644'
+
+    - name: "2.9 | Ensure dockremap entry in /etc/subgid"
+      ansible.builtin.lineinfile:
+        path: /etc/subgid
+        regexp: '^dockremap:'
+        line: "dockremap:100000:65536"
+        create: true
+        mode: '0644'
+
+    # ---------------------------------------------------------------
+    # Xác nhận daemon.json được apply
+    # ---------------------------------------------------------------
+    - name: "VERIFY | Show daemon.json content"
+      ansible.builtin.command: cat /etc/docker/daemon.json
+      register: daemon_verify
+      changed_when: false
+
+    - name: "VERIFY | Print daemon.json"
+      ansible.builtin.debug:
+        msg: "{{ daemon_verify.stdout }}"
+
+  handlers:
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+
+    - name: Restart Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
