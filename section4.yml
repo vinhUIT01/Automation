@@ -1,0 +1,14 @@
+---
+- name: CIS Docker Benchmark - Section 4
+  hosts: docker
+  become: true
+
+  tasks:
+    - name: "4.5 Enable Content trust for Docker"
+      lineinfile:
+        path: /etc/environment
+        regexp: '^DOCKER_CONTENT_TRUST='
+        line: 'DOCKER_CONTENT_TRUST=1'
+        state: present
+
+
