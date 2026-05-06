@@ -32,6 +32,111 @@
       ansible.builtin.assert:
         that:
           - mount_point.rc == 0
-        success_msg: "PASS 1.1"
-        fail_msg: "FAIL 1.1"
-      
+        success_msg: "[PASS] 1.1 - Separate mount point created"
+        fail_msg: "[FAIL] 1.1 - No separate mount point created"
+    
+    - name: 1.1.2 Ensure only trusted users are allowed to control Docker daemon
+      ansible.builtin.command:
+        cmd: getent group docker
+      register: docker_group
+    
+    - name: Print users in docker group
+      ansible.builtin.debug:
+        msg: |
+          [INFO] 4.1 - 
+          Users in docker group:\n {{ docker_group.stdout }}
+
+    - name: 1.1.3 Ensure auditing is configured for the Docker daemon
+      ansible.builtin.command:
+        cmd: apt list --installed  | grep -w auditd
+      register: auditd_output
+
+    - name: Set fact auditd is installed
+      ansible.builtin.set_fact:
+        auditd_present: true
+      when: auditd_output.rc == 0
+
+    - name: Set fact auditd is not installed
+      ansible.builtin.set_fact:
+        auditd_present: false
+      when: auditd_output.rc == 1
+
+    - name: Print result not installed
+      ansible.builtin.assert:
+        that:
+          - not auditd_present
+        fail_msg: "[FAIL] 1.1.3 - auditd not installed"
+
+    - name: Check auditing is configured
+      ansible.builtin.command:
+        cmd: auditctl -l | grep /usr/bin/dockerd
+      register: auditing_1_1_3
+      when: auditd_present
+
+    - name: Assert auditing is configured
+      ansible.builtin.assert:
+        that:
+          - auditing_1_1_3.rc == 0
+        success_msg: "[PASS] 1.1.3 - Auditing is configured for the Docker daemon"
+        fail_msg: "[FAIL] 1.1.3 - Auditing is not configured for the Docker daemon"
+      when: auditd_present
+
+    - name: 1.1.4 Ensure auditing is configured for Docker files and directories /run/containerd
+      ansible.builtin.command:
+        cmd: auditctl -l | grep /run/containerd
+      register: auditing_1_1_4
+      when: auditd_present
+
+    - name: Assert auditing is configured
+      ansible.builtin.assert:
+        that:
+          - auditing_1_1_4.rc == 0
+        success_msg: "[PASS] 1.1.4 - Auditing is configured for the Docker daemon"
+        fail_msg: "[FAIL] 1.1.4 - Auditing is not configured for the Docker daemon"
+      when: auditd_present
+
+    - name: Print result not installed
+      ansible.builtin.assert:
+        that:
+          - not auditd_present
+        fail_msg: "[FAIL] 1.1.4 - auditd not installed"
+
+    - name: 1.1.5 Ensure auditing is configured for Docker files and directories /var/lib/docker
+      ansible.builtin.command:
+        cmd: auditctl -l | grep /var/lib/docker
+      register: auditing_1_1_5
+      when: auditd_present
+
+    - name: Assert auditing is configured
+      ansible.builtin.assert:
+        that:
+          - auditing_1_1_5.rc == 0
+        success_msg: "[PASS] 1.1.5 - Auditing is configured for the Docker daemon"
+        fail_msg: "[FAIL] 1.1.5 - Auditing is not configured for the Docker daemon"
+      when: auditd_present
+
+    - name: Print result not installed
+      ansible.builtin.assert:
+        that:
+          - not auditd_present
+        fail_msg: "[FAIL] 1.1.5 - auditd not installed"
+
+    - name: 1.1.6 Ensure auditing is configured for Docker files and directories /etc/docker
+      ansible.builtin.command:
+        cmd: auditctl -l | grep /etc/docker
+      register: auditing_1_1_6
+      when: auditd_present
+
+    - name: Assert auditing is configured
+      ansible.builtin.assert:
+        that:
+          - auditing_1_1_6.rc == 0
+        success_msg: "[PASS] 1.1.6 - Auditing is configured for the Docker daemon"
+        fail_msg: "[FAIL] 1.1.6 - Auditing is not configured for the Docker daemon"
+      when: auditd_present
+
+    - name: Print result not installed
+      ansible.builtin.assert:
+        that:
+          - not auditd_present
+        fail_msg: "[FAIL] 1.1.6 - auditd not installed"
