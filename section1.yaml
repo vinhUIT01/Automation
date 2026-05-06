@@ -55,6 +55,12 @@
         mode: "0644"  
         dest: /etc/audit/rules.d/docker.rules
       notify: Reload audit rules
+    
+    - name: Reload audit rule on startup
+      ansible.builtin.blockinfile:
+        path: /etc/crontab
+        block: "@reboot root sleep 30 && augenrules --load"
+        insertafter: EOF
 
     - name: Install lynis
       ansible.builtin.apt:
@@ -102,6 +108,5 @@
         state: restarted
 
     - name: Reload audit rules
-      ansible.builtin.command:
-        cmd: augenrules --load
+      ansible.builtin.command: augenrules --load
 ...

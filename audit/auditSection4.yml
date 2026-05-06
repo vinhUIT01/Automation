@@ -1,0 +1,206 @@
+---
+- name: "Section 4 - Container Images and Build File"
+  hosts: docker
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    # ──────────────────────────────────────────────
+    # 4.1 - Ensure a user for the container has been created
+    # ──────────────────────────────────────────────
+    - name: "4.1 | Get running containers"
+      ansible.builtin.command: docker ps -q
+      register: running_containers
+      changed_when: false
+      failed_when: false
+
+    - name: "4.1 | Get User config for each running container"
+      ansible.builtin.command: "docker inspect --format 'User={{ '{{' }}.Config.User{{ '}}' }}' {{ item }}"
+      loop: "{{ running_containers.stdout_lines }}"
+      register: container_users
+      changed_when: false
+      failed_when: false
+      when: running_containers.stdout != ""
+
+    - name: "4.1 | Evaluate result"
+      ansible.builtin.set_fact:
+        result_4_1: >-
+          {%- if running_containers.stdout == "" -%}
+            [INFO] 4.1 - No containers running
+          {%- elif container_users.results
+                  | selectattr('stdout', 'in', ['User=0','User=root','User=','User=[]','User=<no value>'])
+                  | list | length > 0 -%}
+            [FAIL] 4.1 - Containers running as root: {{
+              container_users.results
+              | selectattr('stdout', 'in', ['User=0','User=root','User=','User=[]','User=<no value>'])
+              | map(attribute='item') | list | join(', ')
+            }}
+          {%- else -%}
+            [PASS] 4.1 - All containers run as non-root user
+          {%- endif -%}
+
+    - name: "4.1 | Result"
+      ansible.builtin.debug:
+        msg: "{{ result_4_1 }}"
+
+    # ──────────────────────────────────────────────
+    # 4.2 - Ensure containers use only trusted base images (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.2 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.2 - Ensure that containers use only trusted base images: Manual check required"
+
+    # ──────────────────────────────────────────────
+    # 4.3 - Ensure unnecessary packages are not installed (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.3 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.3 - Ensure that unnecessary packages are not installed in the container: Manual check required"
+
+    # ──────────────────────────────────────────────
+    # 4.4 - Ensure images are scanned and rebuilt to include security patches (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.4 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.4 - Ensure images are scanned and rebuilt to include security patches: Manual check required"
+
+    # ──────────────────────────────────────────────
+    # 4.5 - Ensure Content trust for Docker is Enabled
+    # ──────────────────────────────────────────────
+    - name: "4.5 | Get DOCKER_CONTENT_TRUST"
+      ansible.builtin.shell: echo "${DOCKER_CONTENT_TRUST}"
+      register: docker_content_trust
+      changed_when: false
+      failed_when: false
+
+    - name: "4.5 | Result"
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            '[PASS] 4.5 - Docker Content Trust is enabled'
+            if docker_content_trust.stdout == '1'
+            else '[FAIL] 4.5 - Docker Content Trust is NOT enabled (DOCKER_CONTENT_TRUST != 1)'
+          }}
+
+    # ──────────────────────────────────────────────
+    # 4.6 - Ensure HEALTHCHECK instructions have been added to container images
+    # ──────────────────────────────────────────────
+    - name: "4.6 | Get all local Docker images"
+      ansible.builtin.command: docker images -q
+      register: all_images
+      changed_when: false
+      failed_when: false
+
+    - name: "4.6 | Check HEALTHCHECK for each image"
+      ansible.builtin.shell: >
+        docker inspect --format='{{ '{{' }}.Config.Healthcheck{{ '}}' }}' {{ item }} 2>/dev/null
+      loop: "{{ all_images.stdout_lines }}"
+      register: image_healthchecks
+      changed_when: false
+      failed_when: false
+
+    - name: "4.6 | Evaluate result"
+      ansible.builtin.set_fact:
+        check_4_6_no_health: >-
+          {{
+            image_healthchecks.results
+            | selectattr('stdout', 'search', '<nil>')
+            | map(attribute='item') | list
+          }}
+
+    - name: "4.6 | Result"
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            '[PASS] 4.6 - All images have HEALTHCHECK defined'
+            if check_4_6_no_health | length == 0
+            else '[FAIL] 4.6 - Images missing HEALTHCHECK: ' + (check_4_6_no_health | join(', '))
+          }}
+
+    # ──────────────────────────────────────────────
+    # 4.7 - Ensure update instructions are not used alone in the Dockerfile
+    # ──────────────────────────────────────────────
+    - name: "4.7 | Check image history for standalone update instructions"
+      ansible.builtin.shell: >
+        docker history {{ item }} 2>/dev/null | grep -i "update" || true
+      loop: "{{ all_images.stdout_lines }}"
+      register: image_update_history
+      changed_when: false
+      failed_when: false
+
+    - name: "4.7 | Evaluate result"
+      ansible.builtin.set_fact:
+        check_4_7_update_images: >-
+          {{
+            image_update_history.results
+            | selectattr('stdout', 'ne', '')
+            | map(attribute='item') | list
+          }}
+
+    - name: "4.7 | Result"
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            '[PASS] 4.7 - No standalone update instructions found in image history'
+            if check_4_7_update_images | length == 0
+            else '[INFO] 4.7 - Update instructions found in: ' + (check_4_7_update_images | join(', '))
+          }}
+
+    # ──────────────────────────────────────────────
+    # 4.8 - Ensure setuid and setgid permissions are removed (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.8 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.8 - Ensure setuid and setgid permissions are removed: Manual check required"
+
+    # ──────────────────────────────────────────────
+    # 4.9 - Ensure COPY is used instead of ADD in Dockerfiles
+    # ──────────────────────────────────────────────
+    - name: "4.9 | Check image history for ADD instruction"
+      ansible.builtin.shell: >
+        docker history --format "{{ '{{' }} .CreatedBy {{ '}}' }}" --no-trunc {{ item }} 2>/dev/null
+        | head -n -1 | grep -q 'ADD' && echo "FOUND" || echo ""
+      loop: "{{ all_images.stdout_lines }}"
+      register: image_add_history
+      changed_when: false
+      failed_when: false
+
+    - name: "4.9 | Evaluate result"
+      ansible.builtin.set_fact:
+        check_4_9_add_images: >-
+          {{
+            image_add_history.results
+            | selectattr('stdout', 'eq', 'FOUND')
+            | map(attribute='item') | list
+          }}
+
+    - name: "4.9 | Result"
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            '[PASS] 4.9 - No ADD instruction found, COPY is used correctly'
+            if check_4_9_add_images | length == 0
+            else '[INFO] 4.9 - ADD instruction found in: ' + (check_4_9_add_images | join(', '))
+          }}
+
+    # ──────────────────────────────────────────────
+    # 4.10 - Ensure secrets are not stored in Dockerfiles (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.10 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.10 - Ensure secrets are not stored in Dockerfiles: Manual check required"
+
+    # ──────────────────────────────────────────────
+    # 4.11 - Ensure only verified packages are installed (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.11 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.11 - Ensure only verified packages are installed: Manual check required"
+
+    # ──────────────────────────────────────────────
+    # 4.12 - Ensure all signed artifacts are validated (Manual)
+    # ──────────────────────────────────────────────
+    - name: "4.12 | Result"
+      ansible.builtin.debug:
+        msg: "[INFO] 4.12 - Ensure all signed artifacts are validated: Manual check required"
