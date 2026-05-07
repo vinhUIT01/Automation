@@ -1,2 +1,6 @@
 [docker]
+<<<<<<< HEAD
 192.168.1.6 ansible_user=v1nh2oz4 ansible_password=12345678 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+=======
+192.168.1.5 ansible_user=v1nh2oz4 ansible_password=12345678 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+>>>>>>> 91ab8baad3d15cad63f602d5f6563899d25d7cda
