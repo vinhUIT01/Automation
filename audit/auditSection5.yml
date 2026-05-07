@@ -1,0 +1,7 @@
+---
+- name: "Section 5 -"
+  hosts: docker
+  become: true
+  gather_facts: false
+
+  tasks:
