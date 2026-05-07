@@ -10,6 +10,14 @@
 #   3.4  – docker.socket permissions → 644
 #   3.5  – /etc/docker ownership → root:root
 #   3.6  – /etc/docker permissions → 755
+#   3.7  – Registry cert file ownership → root:root
+#   3.8  – Registry cert file permissions → 444
+#   3.9  – TLS CA cert ownership → root:root
+#   3.10 – TLS CA cert permissions → 444
+#   3.11 – Docker server cert ownership → root:root
+#   3.12 – Docker server cert permissions → 444
+#   3.13 – Docker server cert key ownership → root:root
+#   3.14 – Docker server cert key permissions → 400
 #   3.15 – /var/run/docker.sock ownership → root:docker, permissions 660
 #   3.16 – /var/run/docker.sock permissions → 660
 #   3.17 – daemon.json ownership → root:root
@@ -25,6 +33,13 @@
 
   vars:
     ansible_python_interpreter: /usr/bin/python3
+    # Paths for TLS certificates (3.9–3.14)
+    docker_tls_dir: /etc/docker/certs
+    docker_tlscacert: "{{ docker_tls_dir }}/ca.pem"
+    docker_tlscert: "{{ docker_tls_dir }}/server-cert.pem"
+    docker_tlskey: "{{ docker_tls_dir }}/server-key.pem"
+    # Registry certificate directory (3.7–3.8)
+    docker_registry_cert_dir: /etc/docker/certs.d
 
   tasks:
 
@@ -90,6 +105,124 @@
         owner: root
         group: root
         mode: '0755'
+
+    # ---------------------------------------------------------------
+    # 3.7 & 3.8 – Registry certificate files (/etc/docker/certs.d)
+    # ---------------------------------------------------------------
+    - name: "3.7-3.8 | Check registry cert directory"
+      ansible.builtin.stat:
+        path: "{{ docker_registry_cert_dir }}"
+      register: registry_cert_dir_stat
+
+    - name: "3.7-3.8 | Find all registry certificate files"
+      ansible.builtin.find:
+        paths: "{{ docker_registry_cert_dir }}"
+        patterns: "*.crt,*.cert,*.pem"
+        recurse: true
+      register: registry_cert_files
+      when: registry_cert_dir_stat.stat.exists
+
+    - name: "3.7 | Fix registry cert file ownership → root:root"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+      loop: "{{ registry_cert_files.files | default([]) }}"
+      when: registry_cert_dir_stat.stat.exists
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: "3.8 | Fix registry cert file permissions → 444"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: '0444'
+      loop: "{{ registry_cert_files.files | default([]) }}"
+      when: registry_cert_dir_stat.stat.exists
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: "3.7-3.8 | INFO – Registry cert directory not found (skipping)"
+      ansible.builtin.debug:
+        msg: "Registry cert directory {{ docker_registry_cert_dir }} not found – checks 3.7/3.8 skipped (INFO, not a failure)"
+      when: not registry_cert_dir_stat.stat.exists
+
+    # ---------------------------------------------------------------
+    # 3.9 & 3.10 – TLS CA certificate
+    # ---------------------------------------------------------------
+    - name: "3.9-3.10 | Check TLS CA certificate"
+      ansible.builtin.stat:
+        path: "{{ docker_tlscacert }}"
+      register: tls_ca_stat
+
+    - name: "3.9 | Fix TLS CA cert ownership → root:root"
+      ansible.builtin.file:
+        path: "{{ docker_tlscacert }}"
+        owner: root
+        group: root
+      when: tls_ca_stat.stat.exists
+
+    - name: "3.10 | Fix TLS CA cert permissions → 444"
+      ansible.builtin.file:
+        path: "{{ docker_tlscacert }}"
+        mode: '0444'
+      when: tls_ca_stat.stat.exists
+
+    - name: "3.9-3.10 | INFO – No TLS CA certificate found (skipping)"
+      ansible.builtin.debug:
+        msg: "TLS CA certificate not found at {{ docker_tlscacert }} – checks 3.9/3.10 skipped (INFO, not a failure)"
+      when: not tls_ca_stat.stat.exists
+
+    # ---------------------------------------------------------------
+    # 3.11 & 3.12 – Docker server certificate
+    # ---------------------------------------------------------------
+    - name: "3.11-3.12 | Check Docker server certificate"
+      ansible.builtin.stat:
+        path: "{{ docker_tlscert }}"
+      register: tls_cert_stat
+
+    - name: "3.11 | Fix Docker server cert ownership → root:root"
+      ansible.builtin.file:
+        path: "{{ docker_tlscert }}"
+        owner: root
+        group: root
+      when: tls_cert_stat.stat.exists
+
+    - name: "3.12 | Fix Docker server cert permissions → 444"
+      ansible.builtin.file:
+        path: "{{ docker_tlscert }}"
+        mode: '0444'
+      when: tls_cert_stat.stat.exists
+
+    - name: "3.11-3.12 | INFO – No TLS server certificate found (skipping)"
+      ansible.builtin.debug:
+        msg: "TLS server certificate not found at {{ docker_tlscert }} – checks 3.11/3.12 skipped (INFO, not a failure)"
+      when: not tls_cert_stat.stat.exists
+
+    # ---------------------------------------------------------------
+    # 3.13 & 3.14 – Docker server certificate key
+    # ---------------------------------------------------------------
+    - name: "3.13-3.14 | Check Docker server certificate key"
+      ansible.builtin.stat:
+        path: "{{ docker_tlskey }}"
+      register: tls_key_stat
+
+    - name: "3.13 | Fix Docker server cert key ownership → root:root"
+      ansible.builtin.file:
+        path: "{{ docker_tlskey }}"
+        owner: root
+        group: root
+      when: tls_key_stat.stat.exists
+
+    - name: "3.14 | Fix Docker server cert key permissions → 400"
+      ansible.builtin.file:
+        path: "{{ docker_tlskey }}"
+        mode: '0400'
+      when: tls_key_stat.stat.exists
+
+    - name: "3.13-3.14 | INFO – No TLS server key found (skipping)"
+      ansible.builtin.debug:
+        msg: "TLS server key not found at {{ docker_tlskey }} – checks 3.13/3.14 skipped (INFO, not a failure)"
+      when: not tls_key_stat.stat.exists
 
     # ---------------------------------------------------------------
     # 3.15 & 3.16 – /var/run/docker.sock
@@ -164,6 +297,23 @@
 
         echo "--- 3.5  /etc/docker ---"
         stat -c "%U:%G %a %n" /etc/docker
+
+        echo "--- 3.7  Registry certs (/etc/docker/certs.d) ---"
+        if [ -d /etc/docker/certs.d ]; then
+          find /etc/docker/certs.d -type f \( -name "*.crt" -o -name "*.cert" -o -name "*.pem" \) \
+            -exec stat -c "%U:%G %a %n" {} \; 2>/dev/null || echo "No cert files found"
+        else
+          echo "NOT FOUND (directory absent)"
+        fi
+
+        echo "--- 3.9  TLS CA cert ---"
+        stat -c "%U:%G %a %n" /etc/docker/certs/ca.pem 2>/dev/null || echo "NOT FOUND"
+
+        echo "--- 3.11 TLS server cert ---"
+        stat -c "%U:%G %a %n" /etc/docker/certs/server-cert.pem 2>/dev/null || echo "NOT FOUND"
+
+        echo "--- 3.13 TLS server key ---"
+        stat -c "%U:%G %a %n" /etc/docker/certs/server-key.pem 2>/dev/null || echo "NOT FOUND"
 
         echo "--- 3.15 /var/run/docker.sock ---"
         stat -c "%U:%G %a %n" /var/run/docker.sock 2>/dev/null || echo "NOT FOUND"
