@@ -1,0 +1,150 @@
+- name: CIS Docker Benchmark - Audit Section 2 & 3
+  hosts: docker
+  become: true
+  tasks:
+    # ---------------------------------------------------------------
+    # SECTION 2: Docker Daemon Configuration (Updated from image)
+    # ---------------------------------------------------------------
+    - name: 2.1 Ensure TLS Authentication is enabled
+      ansible.builtin.shell: |
+        grep -E '"tls":\s*true' /etc/docker/daemon.json && \
+        grep -E '"tlsverify":\s*true' /etc/docker/daemon.json
+      register: tls_audit
+      failed_when: false
+
+    - name: Assert 2.1 TLS is enabled
+      ansible.builtin.assert:
+        that:
+          - tls_audit.rc == 0
+        success_msg: "[PASS] 2.1 - TLS Authentication is enabled"
+        fail_msg: "[FAIL] 2.1 - TLS Authentication is NOT correctly enabled in daemon.json"
+      failed_when: false
+
+    - name: 2.2 Ensure logging is configured correctly
+      ansible.builtin.shell: |
+        grep -E '"log-driver":\s*"json-file"' /etc/docker/daemon.json && \
+        grep -E '"max-size":\s*"10m"' /etc/docker/daemon.json && \
+        grep -E '"max-file":\s*"3"' /etc/docker/daemon.json
+      register: logging_audit
+      failed_when: false
+
+    - name: Assert 2.2 Logging is configured
+      ansible.builtin.assert:
+        that:
+          - logging_audit.rc == 0
+        success_msg: "[PASS] 2.2 - Logging is configured correctly"
+        fail_msg: "[FAIL] 2.2 - Logging is NOT configured correctly (Expected: json-file, 10m, 3)"
+      failed_when: false
+
+    - name: 2.3 Ensure User Namespace Remapping is enabled
+      ansible.builtin.shell: |
+        grep -E '"userns-remap":\s*"default"' /etc/docker/daemon.json && \
+        [ -f /etc/subuid ] && [ -f /etc/subgid ]
+      register: userns_audit
+      failed_when: false
+
+    - name: Assert 2.3 User Namespace Remapping is enabled
+      ansible.builtin.assert:
+        that:
+          - userns_audit.rc == 0
+        success_msg: "[PASS] 2.3 - User Namespace Remapping is enabled"
+        fail_msg: "[FAIL] 2.3 - User Namespace Remapping is NOT enabled or subuid/subgid missing"
+      failed_when: false
+
+    - name: 2.4 Ensure Legacy Registry is disabled
+      ansible.builtin.shell: |
+        grep -E '"disable-legacy-registry":\s*true' /etc/docker/daemon.json
+      register: legacy_reg_audit
+      failed_when: false
+
+    - name: Assert 2.4 Legacy Registry is disabled
+      ansible.builtin.assert:
+        that:
+          - legacy_reg_audit.rc == 0
+        success_msg: "[PASS] 2.4 - Legacy Registry is disabled"
+        fail_msg: "[FAIL] 2.4 - Legacy Registry is NOT disabled"
+      failed_when: false
+
+    - name: 2.5 Ensure Live Restore is enabled
+      ansible.builtin.shell: |
+        grep -E '"live-restore":\s*true' /etc/docker/daemon.json
+      register: live_restore_audit
+      failed_when: false
+
+    - name: Assert 2.5 Live Restore is enabled
+      ansible.builtin.assert:
+        that:
+          - live_restore_audit.rc == 0
+        success_msg: "[PASS] 2.5 - Live Restore is enabled"
+        fail_msg: "[FAIL] 2.5 - Live Restore is NOT enabled"
+      failed_when: false
+
+
+    # ---------------------------------------------------------------
+    # SECTION 3: Docker Daemon Configuration Files (Updated from image)
+    # ---------------------------------------------------------------
+    - name: 3.1.1 Audit /var/run/docker.sock ownership and permissions
+      ansible.builtin.stat:
+        path: /var/run/docker.sock
+      register: docker_sock_audit
+
+    - name: Assert 3.1.1 /var/run/docker.sock root:docker 660
+      ansible.builtin.assert:
+        that:
+          - docker_sock_audit.stat.pw_name == 'root'
+          - docker_sock_audit.stat.gr_name == 'docker'
+          - docker_sock_audit.stat.mode == '0660'
+        success_msg: "[PASS] 3.1.1 - /var/run/docker.sock ownership and permissions are correct"
+        fail_msg: "[FAIL] 3.1.1 - /var/run/docker.sock check failed"
+      when: docker_sock_audit.stat.exists
+      failed_when: false
+
+    - name: 3.1.2 Audit /etc/docker/daemon.json ownership and permissions
+      ansible.builtin.stat:
+        path: /etc/docker/daemon.json
+      register: daemon_json_audit
+
+    - name: Assert 3.1.2 /etc/docker/daemon.json root:root 644
+      ansible.builtin.assert:
+        that:
+          - daemon_json_audit.stat.pw_name == 'root'
+          - daemon_json_audit.stat.gr_name == 'root'
+          - daemon_json_audit.stat.mode == '0644'
+        success_msg: "[PASS] 3.1.2 - /etc/docker/daemon.json ownership and permissions are correct"
+        fail_msg: "[FAIL] 3.1.2 - /etc/docker/daemon.json check failed"
+      when: daemon_json_audit.stat.exists
+      failed_when: false
+
+    - name: 3.1.3 Audit docker.service file ownership and permissions
+      ansible.builtin.stat:
+        path: /usr/lib/systemd/system/docker.service
+      register: docker_svc_audit
+
+    - name: Assert 3.1.3 docker.service root:root 644
+      ansible.builtin.assert:
+        that:
+          - docker_svc_audit.stat.pw_name == 'root'
+          - docker_svc_audit.stat.gr_name == 'root'
+          - docker_svc_audit.stat.mode == '0644'
+        success_msg: "[PASS] 3.1.3 - docker.service ownership and permissions are correct"
+        fail_msg: "[FAIL] 3.1.3 - docker.service check failed"
+      when: docker_svc_audit.stat.exists
+      failed_when: false
+
+    - name: 3.1.4 Audit /var/lib/docker ownership and permissions
+      ansible.builtin.stat:
+        path: /var/lib/docker
+      register: docker_data_dir_audit
+
+    - name: Assert 3.1.4 /var/lib/docker root:root 0710
+      ansible.builtin.assert:
+        that:
+          - docker_data_dir_audit.stat.pw_name == 'root'
+          - docker_data_dir_audit.stat.gr_name == 'root'
+          - docker_data_dir_audit.stat.mode == '0710'
+        success_msg: "[PASS] 3.1.4 - /var/lib/docker ownership and permissions are correct"
+        fail_msg: "[FAIL] 3.1.4 - /var/lib/docker check failed (Expected 0710, Current: {{ docker_data_dir_audit.stat.mode }})"
+      when: docker_data_dir_audit.stat.exists
+      failed_when: false
+
+
