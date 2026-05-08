@@ -52,6 +52,7 @@
           -w /etc/containerd/config.toml -k docker
           -w /usr/bin/containerd-shim-runc-v2 -k docker
           -w /usr/bin/runc -k docker
+          -w /run/docker.sock -k docker
         mode: "0644"  
         dest: /etc/audit/rules.d/docker.rules
       notify: Reload audit rules

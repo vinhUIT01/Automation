@@ -11,8 +11,9 @@
     - name: Check user namespace
       ansible.builtin.shell:
         cmd: "docker info | grep -q userns"
+      failed_when: false
       register: userns_output
-    
+
     - name: Set path to check
       ansible.builtin.set_fact:
         docker_root_path: "{{ docker_info.stdout }}/.."
@@ -50,6 +51,7 @@
       ansible.builtin.shell:
         cmd: apt list --installed  | grep -w auditd
       register: auditd_output
+      failed_when: false
 
     - name: Set fact auditd is installed
       ansible.builtin.set_fact:
@@ -72,6 +74,7 @@
       ansible.builtin.shell:
         cmd: auditctl -l | grep /usr/bin/dockerd
       register: auditing_1_1_3
+      failed_when: false
       when: auditd_present
 
     - name: Assert auditing is configured
@@ -84,76 +87,103 @@
       failed_when: false
 
     - name: 1.1.4 Ensure auditing is configured for Docker files and directories /run/containerd
+      ansible.builtin.stat:
+        path: /run/containerd
+      register: run_containerd_stat
+
+    - name: Info if file does not exist
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.4 - /run/containerd does not exist"
+      when: not run_containerd_stat.stat.exists
+
+    - name: Auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.4 - auditd not installed"
+      when: (not auditd_present) and run_containerd_stat.stat.exists
+
+    - name: Check auditing is configured
       ansible.builtin.shell:
         cmd: auditctl -l | grep /run/containerd
       register: auditing_1_1_4
-      when: auditd_present
+      failed_when: false
+      when: auditd_present and run_containerd_stat.stat.exists
 
     - name: Assert auditing is configured
       ansible.builtin.assert:
         that:
           - auditing_1_1_4.rc == 0
-        success_msg: "[PASS] 1.1.4 - Auditing is configured for the Docker daemon"
-        fail_msg: "[FAIL] 1.1.4 - Auditing is not configured for the Docker daemon"
-      when: auditd_present
-      failed_when: false
-
-    - name: Print result not installed
-      ansible.builtin.assert:
-        that:
-          - auditd_present
-        fail_msg: "[FAIL] 1.1.4 - auditd not installed"
+        success_msg: "[PASS] 1.1.4 - Auditing is configured for /run/containerd"
+        fail_msg: "[FAIL] 1.1.4 - Auditing is not configured for /run/containerd"
+      when: auditd_present and run_containerd_stat.stat.exists
       failed_when: false
 
     - name: 1.1.5 Ensure auditing is configured for Docker files and directories /var/lib/docker
+      ansible.builtin.stat:
+        path: /var/lib/docker
+      register: var_lib_docker_stat
+
+    - name: Info if file does not exist
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.5 - /var/lib/docker does not exist"
+      when: not var_lib_docker_stat.stat.exists
+
+    - name: Auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.5 - auditd not installed"
+      when: (not auditd_present) and var_lib_docker_stat.stat.exists
+
+    - name: Check auditing is configured
       ansible.builtin.shell:
         cmd: auditctl -l | grep /var/lib/docker
       register: auditing_1_1_5
-      when: auditd_present
+      failed_when: false
+      when: auditd_present and var_lib_docker_stat.stat.exists
 
     - name: Assert auditing is configured
       ansible.builtin.assert:
         that:
           - auditing_1_1_5.rc == 0
-        success_msg: "[PASS] 1.1.5 - Auditing is configured for the Docker daemon"
-        fail_msg: "[FAIL] 1.1.5 - Auditing is not configured for the Docker daemon"
-      when: auditd_present
-      failed_when: false
-
-    - name: Print result not installed
-      ansible.builtin.assert:
-        that:
-          - auditd_present
-        fail_msg: "[FAIL] 1.1.5 - auditd not installed"
+        success_msg: "[PASS] 1.1.5 - Auditing is configured for /var/lib/docker"
+        fail_msg: "[FAIL] 1.1.5 - Auditing is not configured for /var/lib/docker"
+      when: auditd_present and var_lib_docker_stat.stat.exists
       failed_when: false
 
     - name: 1.1.6 Ensure auditing is configured for Docker files and directories /etc/docker
+      ansible.builtin.stat:
+        path: /etc/docker
+      register: etc_docker_stat
+
+    - name: Info if file does not exist
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.6 - /etc/docker does not exist"
+      when: not etc_docker_stat.stat.exists
+
+    - name: Auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.6 - auditd not installed"
+      when: (not auditd_present) and etc_docker_stat.stat.exists
+
+    - name: Check auditing is configured
       ansible.builtin.shell:
         cmd: auditctl -l | grep /etc/docker
       register: auditing_1_1_6
-      when: auditd_present
+      failed_when: false
+      when: auditd_present and etc_docker_stat.stat.exists
 
     - name: Assert auditing is configured
       ansible.builtin.assert:
         that:
           - auditing_1_1_6.rc == 0
-        success_msg: "[PASS] 1.1.6 - Auditing is configured for the Docker daemon"
-        fail_msg: "[FAIL] 1.1.6 - Auditing is not configured for the Docker daemon"
-      when: auditd_present
-      failed_when: false
-
-    - name: Print result not installed
-      ansible.builtin.assert:
-        that:
-          - auditd_present
-        fail_msg: "[FAIL] 1.1.6 - auditd not installed"
+        success_msg: "[PASS] 1.1.6 - Auditing is configured for /etc/docker"
+        fail_msg: "[FAIL] 1.1.6 - Auditing is not configured for /etc/docker"
+      when: auditd_present and etc_docker_stat.stat.exists
       failed_when: false
 
     - name: 1.1.7 Ensure auditing is configured for Docker files and directories docker.service
       ansible.builtin.systemd_service:
         name: docker.service
       register: docker_service_command
-      when: auditd_present
+
     - name: Set fact
       ansible.builtin.set_fact:
         docker_service_path: "{{ docker_service_command.status.FragmentPath }}"
@@ -162,6 +192,7 @@
         cmd: auditctl -l | grep {{ docker_service_path }}
       when: auditd_present and docker_service_path != ""
       register: docker_service_auditd
+      failed_when: false
     - name: Asser file not exists
       ansible.builtin.assert:
         that:
@@ -203,6 +234,7 @@
         cmd: auditctl -l | grep /run/containerd/containerd.sock
       register: containerd_command
       when: auditd_present and containered_stats.stat.exists
+      failed_when: false
 
     - name: Assert if auditing is enabled for containerd.sock
       ansible.builtin.assert:
@@ -214,13 +246,92 @@
       failed_when: false
 
     - name: 1.1.9 Ensure auditing is configured for Docker files and directories - docker.socket
+      ansible.builtin.systemd_service:
+        name: docker.socket
+      register: docker_socket_command
+
+    - name: Check docker.socket file exists
       ansible.builtin.assert:
         that:
-        - docker_service_path != ""
-        fail_msg: "[INFO] 1.1. - Docker.servicefile does not exist"
+          - docker_socket_command.status.FragmentPath != ""
+        fail_msg: "[INFO] 1.1.9 - Docker.socket does not exist"
       failed_when: false
+
+    - name: Read file content
+      ansible.builtin.slurp:
+        src: "{{ docker_socket_command.status.FragmentPath }}"
+      register: fragment_path_base64
 
     - name: Look for path
       ansible.builtin.set_fact:
-        path: "{{lookup(  )}}"
-        # /^ListenStream(.+)/gmregex wild card
+        docker_socket_path: >-
+          {{ fragment_path_base64.content | b64decode
+          | regex_search('^ListenStream(.+)', multiline=True) | regex_replace('ListenStream=','') | trim }}
+      when: docker_socket_command.status.FragmentPath != ""
+
+    - name: Check file exists
+      ansible.builtin.stat:
+        path: "{{ docker_socket_path }}"
+      register: docker_socket_file
+      when: docker_socket_command.status.FragmentPath != ""
+    - name: Assert file does not exist
+      ansible.builtin.assert:
+        that:
+          - docker_socket_file.stat.exists
+        fail_msg: "[INFO] 1.1.9 - Docker.socket does not exist"
+      failed_when: false
+      when: docker_socket_command.status.FragmentPath != ""
+
+    - name: Auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.9 - auditd not installed"
+      when: (not auditd_present) and (docker_socket_command.status.FragmentPath != "") and docker_socket_file.stat.exists
+
+    - name: Ensure auditing is configured for Docker files and directories docker.socket
+      ansible.builtin.shell:
+        cmd: "auditctl -l | grep {{ docker_socket_path }}"
+      register: auditing_1_1_9
+      when: auditd_present and (docker_socket_command.status.FragmentPath != "") and docker_socket_file.stat.exists
+      failed_when: false
+
+    - name: Assert auditing is configured
+      ansible.builtin.assert:
+        that:
+          - auditing_1_1_9.rc == 0
+        success_msg: "[PASS] 1.1.9 - Auditing is configured for the Docker socket"
+        fail_msg: "[FAIL] 1.1.9 - Auditing is not configured for the Docker socket"
+      when: auditd_present and (docker_socket_command.status.FragmentPath != "") and docker_socket_file.stat.exists
+      failed_when: false
+
+    - name: 1.1.10 Ensure auditing is configured for Docker files and directories /etc/default/docker
+      ansible.builtin.stat:
+        path: /etc/default/docker
+      register: etc_default_docker_stat
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.10 - /etc/default/docker does not exists"
+      when: not etc_default_docker_stat.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.10 - auditd not installed"
+      when: (not auditd_present) and etc_default_docker_stat.stat.exists
+
+    - name: Check if auditing is enabled for /etc/default/docker
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /etc/default/docker
+      register: etc_default_docker_command
+      failed_when: false
+      when: auditd_present and etc_default_docker_stat.stat.exists
+
+    - name: Assert if auditing is enabled for /etc/default/docker
+      ansible.builtin.assert:
+        that:
+          - etc_default_docker_command.rc == 0
+        success_msg: "[PASS] 1.1.10 - Auditing is configured for /etc/default/docker"
+        fail_msg: "[FAIL] 1.1.10 - Auditing is not configured for /etc/default/docker"
+      when: auditd_present and etc_default_docker_stat.stat.exists
+      failed_when: false
+
+    
