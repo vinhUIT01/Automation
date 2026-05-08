@@ -334,4 +334,3 @@
       when: auditd_present and etc_default_docker_stat.stat.exists
       failed_when: false
 
-    
