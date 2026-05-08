@@ -334,3 +334,96 @@
       when: auditd_present and etc_default_docker_stat.stat.exists
       failed_when: false
 
+    - name: 1.1.11 Ensure auditing is configured for Docker files and directories /etc/docker/daemon.json
+      ansible.builtin.stat:
+        path: /etc/docker/daemon.json
+      register: docker_daemon_stat
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.11 - /etc/docker/daemon.json does not exists"
+      when: not docker_daemon_stat.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.11 - auditd not installed"
+      when: (not auditd_present) and docker_daemon_stat.stat.exists
+
+    - name: Check if auditing is enabled for /etc/docker/daemon.json
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /etc/docker/daemon.json
+      register: etc_default_docker_command
+      failed_when: false
+      when: auditd_present and docker_daemon_stat.stat.exists
+
+    - name: Assert if auditing is enabled for /etc/docker/daemon.json
+      ansible.builtin.assert:
+        that:
+          - etc_default_docker_command.rc == 0
+        success_msg: "[PASS] 1.1.11 - Auditing is configured for /etc/docker/daemon.json"
+        fail_msg: "[FAIL] 1.1.11 - Auditing is not configured for /etc/docker/daemon.json"
+      when: auditd_present and docker_daemon_stat.stat.exists
+      failed_when: false
+
+
+    - name: 1.1.12 Ensure auditing is configured for Docker files and directories /etc/containerd/config.toml
+      ansible.builtin.stat:
+        path: /etc/containerd/config.toml
+      register: containerd_config_stat
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.12 - /etc/containerd/config.toml does not exists"
+      when: not containerd_config_stat.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.12 - auditd not installed"
+      when: (not auditd_present) and containerd_config_stat.stat.exists
+
+    - name: Check if auditing is enabled for /etc/containerd/config.toml
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /etc/containerd/config.toml
+      register: etc_default_docker_command
+      failed_when: false
+      when: auditd_present and containerd_config_stat.stat.exists
+
+    - name: Assert if auditing is enabled for /etc/containerd/config.toml
+      ansible.builtin.assert:
+        that:
+          - etc_default_docker_command.rc == 0
+        success_msg: "[PASS] 1.1.12 - Auditing is configured for /etc/containerd/config.toml"
+        fail_msg: "[FAIL] 1.1.12 - Auditing is not configured for /etc/containerd/config.toml"
+      when: auditd_present and containerd_config_stat.stat.exists
+      failed_when: false
+
+    - name: 1.1.13 Ensure auditing is configured for Docker files and directories /etc/sysconfig/docker
+      ansible.builtin.stat:
+        path: /etc/sysconfig/docker
+      register: sysconfig_docker_stat
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.13 - /etc/sysconfig/docker does not exists"
+      when: not sysconfig_docker_stat.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.13 - auditd not installed"
+      when: (not auditd_present) and sysconfig_docker_stat.stat.exists
+
+    - name: Check if auditing is enabled for /etc/sysconfig/docker
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /etc/sysconfig/docker
+      register: etc_default_docker_command
+      failed_when: false
+      when: auditd_present and sysconfig_docker_stat.stat.exists
+
+    - name: Assert if auditing is enabled for /etc/sysconfig/docker
+      ansible.builtin.assert:
+        that:
+          - etc_default_docker_command.rc == 0
+        success_msg: "[PASS] 1.1.13 - Auditing is configured for /etc/sysconfig/docker"
+        fail_msg: "[FAIL] 1.1.13 - Auditing is not configured for /etc/sysconfig/docker"
+      when: auditd_present and sysconfig_docker_stat.stat.exists
+      failed_when: false
