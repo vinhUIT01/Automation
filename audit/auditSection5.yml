@@ -1,7 +1,633 @@
 ---
-- name: "Section 5 -"
+- name: "Section 5 - Docker Benchmark Audit"
   hosts: docker
   become: true
-  gather_facts: false
+  gather_facts: true
+  vars:
+    report_dir: /tmp/docker_benchmark
+    report_file: "{{ report_dir }}/docker_benchmark_report.html"
+    audit_results: []
 
   tasks:
+
+    # ─────────────────────────────────────────────
+    # SETUP
+    # ─────────────────────────────────────────────
+    - name: Create report directory
+      file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Get Docker version
+      command: docker version --format '{{ "{{" }}.Server.Version{{ "}}" }}'
+      register: docker_version
+      changed_when: false
+      failed_when: false
+
+    - name: Get Docker info
+      command: docker info --format json
+      register: docker_info_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Parse Docker info
+      set_fact:
+        docker_info: "{{ docker_info_raw.stdout | from_json }}"
+      when: docker_info_raw.rc == 0
+
+    # ─────────────────────────────────────────────
+    # 5.1 - HOST CONFIGURATION
+    # ─────────────────────────────────────────────
+    - name: "[5.1.1] Check Docker daemon is running as root"
+      shell: "ps -ef | grep dockerd | grep -v grep | awk '{print $1}'"
+      register: chk_5_1_1
+      changed_when: false
+      failed_when: false
+
+    - name: "[5.1.1] Evaluate Docker daemon ownership"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.1.1"
+          title: "Docker daemon running as root"
+          status: "{{ 'PASS' if chk_5_1_1.stdout | trim == 'root' else 'WARN' }}"
+          detail: "Process owner: {{ chk_5_1_1.stdout | trim | default('unknown') }}"
+          section: "Host Configuration"
+
+    - name: "[5.1.2] Check Docker group membership"
+      shell: "getent group docker | cut -d: -f4"
+      register: chk_5_1_2
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.1.2"
+          title: "Docker group membership restricted"
+          status: "{{ 'WARN' if chk_5_1_2.stdout | trim != '' else 'PASS' }}"
+          detail: "Docker group members: {{ chk_5_1_2.stdout | trim | default('none') }}"
+          section: "Host Configuration"
+
+    - name: "[5.1.3] Check auditing for Docker daemon"
+      shell: "auditctl -l 2>/dev/null | grep '/usr/bin/dockerd' || echo 'NOT_FOUND'"
+      register: chk_5_1_3
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.1.3"
+          title: "Auditing enabled for Docker daemon"
+          status: "{{ 'PASS' if 'NOT_FOUND' not in chk_5_1_3.stdout else 'WARN' }}"
+          detail: "{{ chk_5_1_3.stdout | trim }}"
+          section: "Host Configuration"
+
+    - name: "[5.1.4] Check auditing for Docker files and directories"
+      shell: >
+        auditctl -l 2>/dev/null | grep -E '(/var/lib/docker|/etc/docker|docker.service|docker.socket)' | wc -l
+      register: chk_5_1_4
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.1.4"
+          title: "Auditing enabled for Docker files and directories"
+          status: "{{ 'PASS' if chk_5_1_4.stdout | int > 0 else 'WARN' }}"
+          detail: "Audit rules matching Docker paths: {{ chk_5_1_4.stdout | trim }}"
+          section: "Host Configuration"
+
+    # ─────────────────────────────────────────────
+    # 5.2 - DOCKER DAEMON CONFIGURATION
+    # ─────────────────────────────────────────────
+    - name: "[5.2.1] Check Docker daemon config file exists"
+      stat:
+        path: /etc/docker/daemon.json
+      register: chk_5_2_1_stat
+
+    - name: "[5.2.1] Read Docker daemon config"
+      slurp:
+        src: /etc/docker/daemon.json
+      register: daemon_json_raw
+      when: chk_5_2_1_stat.stat.exists
+      failed_when: false
+
+    - name: "[5.2.1] Parse daemon.json"
+      set_fact:
+        daemon_json: "{{ daemon_json_raw['content'] | b64decode | from_json }}"
+      when: chk_5_2_1_stat.stat.exists and daemon_json_raw is defined
+      failed_when: false
+
+    - name: "[5.2.1] Default empty daemon config"
+      set_fact:
+        daemon_json: {}
+      when: not chk_5_2_1_stat.stat.exists or daemon_json is not defined
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.1"
+          title: "Docker daemon config file present"
+          status: "{{ 'PASS' if chk_5_2_1_stat.stat.exists else 'INFO' }}"
+          detail: "/etc/docker/daemon.json {{ 'exists' if chk_5_2_1_stat.stat.exists else 'not found - using defaults' }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.2] Check icc (inter-container communication) disabled"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.2"
+          title: "Inter-Container Communication disabled (icc=false)"
+          status: "{{ 'PASS' if daemon_json.get('icc', true) == false else 'WARN' }}"
+          detail: "icc setting: {{ daemon_json.get('icc', 'not set (default: true)') }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.3] Check log level is set to info"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.3"
+          title: "Docker daemon log level set to info"
+          status: "{{ 'PASS' if daemon_json.get('log-level', 'info') == 'info' else 'WARN' }}"
+          detail: "log-level: {{ daemon_json.get('log-level', 'not set (default: info)') }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.4] Check iptables is not disabled"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.4"
+          title: "iptables not disabled in Docker daemon"
+          status: "{{ 'WARN' if daemon_json.get('iptables', true) == false else 'PASS' }}"
+          detail: "iptables: {{ daemon_json.get('iptables', 'not set (default: true)') }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.5] Check insecure registries"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.5"
+          title: "No insecure registries configured"
+          status: "{{ 'WARN' if daemon_json.get('insecure-registries', []) | length > 0 else 'PASS' }}"
+          detail: "insecure-registries: {{ daemon_json.get('insecure-registries', []) | join(', ') | default('none') }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.6] Check aufs storage driver not used"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.6"
+          title: "aufs storage driver not in use"
+          status: "{{ 'WARN' if daemon_json.get('storage-driver', '') == 'aufs' else 'PASS' }}"
+          detail: "storage-driver: {{ daemon_json.get('storage-driver', 'not set (using Docker default)') }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.7] Check TLS is configured"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.7"
+          title: "TLS authentication configured for Docker daemon"
+          status: "{{ 'PASS' if daemon_json.get('tls', false) == true or daemon_json.get('tlsverify', false) == true else 'WARN' }}"
+          detail: "tls: {{ daemon_json.get('tls', false) }}, tlsverify: {{ daemon_json.get('tlsverify', false) }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.8] Check default ulimit is configured"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.8"
+          title: "Default ulimit configured appropriately"
+          status: "{{ 'PASS' if daemon_json.get('default-ulimits', {}) | length > 0 else 'INFO' }}"
+          detail: "default-ulimits: {{ daemon_json.get('default-ulimits', 'not configured') }}"
+          section: "Docker Daemon Configuration"
+
+    - name: "[5.2.9] Check userland-proxy disabled"
+      set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.2.9"
+          title: "Userland proxy disabled"
+          status: "{{ 'PASS' if daemon_json.get('userland-proxy', true) == false else 'INFO' }}"
+          detail: "userland-proxy: {{ daemon_json.get('userland-proxy', 'not set (default: true)') }}"
+          section: "Docker Daemon Configuration"
+
+    # ─────────────────────────────────────────────
+    # 5.3 - CONTAINER RUNTIME CHECKS
+    # ─────────────────────────────────────────────
+    - name: Get list of running containers
+      command: docker ps -q
+      register: running_containers
+      changed_when: false
+      failed_when: false
+
+    - name: "[5.3.1] Check containers not running as root"
+      shell: |
+        fail_list=""
+        for cid in $(docker ps -q); do
+          user=$(docker inspect --format '{{ "{{" }}.Config.User{{ "}}" }}' $cid)
+          name=$(docker inspect --format '{{ "{{" }}.Name{{ "}}" }}' $cid | sed 's|/||')
+          if [ -z "$user" ] || [ "$user" = "root" ] || [ "$user" = "0" ]; then
+            fail_list="${fail_list} ${name}(${cid:0:12})"
+          fi
+        done
+        echo "$fail_list"
+      register: chk_5_3_1
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.1"
+          title: "Containers not running as root user"
+          status: "{{ 'WARN' if chk_5_3_1.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Root containers: ' + chk_5_3_1.stdout | trim if chk_5_3_1.stdout | trim != '' else 'All containers use non-root user' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.2] Check privileged containers"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} Privileged={{ "{{" }}.HostConfig.Privileged{{ "}}" }}' {} 2>/dev/null | grep 'Privileged=true' | sed 's|/||'
+      register: chk_5_3_2
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.2"
+          title: "No privileged containers running"
+          status: "{{ 'WARN' if chk_5_3_2.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Privileged containers: ' + chk_5_3_2.stdout | trim if chk_5_3_2.stdout | trim != '' else 'No privileged containers found' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.3] Check containers have memory limits"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} Mem={{ "{{" }}.HostConfig.Memory{{ "}}" }}' {} 2>/dev/null | grep 'Mem=0' | sed 's|/||'
+      register: chk_5_3_3
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.3"
+          title: "Memory limits set on containers"
+          status: "{{ 'WARN' if chk_5_3_3.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'No memory limit: ' + chk_5_3_3.stdout | trim if chk_5_3_3.stdout | trim != '' else 'All containers have memory limits' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.4] Check containers have CPU limits"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} CPU={{ "{{" }}.HostConfig.CpuShares{{ "}}" }}' {} 2>/dev/null | grep 'CPU=0' | sed 's|/||'
+      register: chk_5_3_4
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.4"
+          title: "CPU shares set on containers"
+          status: "{{ 'WARN' if chk_5_3_4.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'No CPU shares: ' + chk_5_3_4.stdout | trim if chk_5_3_4.stdout | trim != '' else 'All containers have CPU shares set' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.5] Check containers not sharing host network"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} Net={{ "{{" }}.HostConfig.NetworkMode{{ "}}" }}' {} 2>/dev/null | grep 'Net=host' | sed 's|/||'
+      register: chk_5_3_5
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.5"
+          title: "Containers not using host network mode"
+          status: "{{ 'WARN' if chk_5_3_5.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Host network containers: ' + chk_5_3_5.stdout | trim if chk_5_3_5.stdout | trim != '' else 'No containers on host network' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.6] Check containers not sharing host PID namespace"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} PidMode={{ "{{" }}.HostConfig.PidMode{{ "}}" }}' {} 2>/dev/null | grep 'PidMode=host' | sed 's|/||'
+      register: chk_5_3_6
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.6"
+          title: "Containers not sharing host PID namespace"
+          status: "{{ 'WARN' if chk_5_3_6.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Host PID containers: ' + chk_5_3_6.stdout | trim if chk_5_3_6.stdout | trim != '' else 'No containers sharing host PID namespace' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.7] Check containers not sharing host IPC namespace"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} IpcMode={{ "{{" }}.HostConfig.IpcMode{{ "}}" }}' {} 2>/dev/null | grep 'IpcMode=host' | sed 's|/||'
+      register: chk_5_3_7
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.7"
+          title: "Containers not sharing host IPC namespace"
+          status: "{{ 'WARN' if chk_5_3_7.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Host IPC containers: ' + chk_5_3_7.stdout | trim if chk_5_3_7.stdout | trim != '' else 'No containers sharing host IPC namespace' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.8] Check read-only root filesystem"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} RO={{ "{{" }}.HostConfig.ReadonlyRootfs{{ "}}" }}' {} 2>/dev/null | grep 'RO=false' | sed 's|/||'
+      register: chk_5_3_8
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.8"
+          title: "Container root filesystems mounted read-only"
+          status: "{{ 'WARN' if chk_5_3_8.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Writable root fs: ' + chk_5_3_8.stdout | trim if chk_5_3_8.stdout | trim != '' else 'All container root filesystems are read-only' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.9] Check no sensitive host paths are mounted"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }}:{{ "{{" }}range .Mounts{{ "}}" }}{{ "{{" }}.Source{{ "}}" }},{{ "{{" }}end{{ "}}" }}' {} 2>/dev/null \
+          | grep -E '(/etc|/proc|/sys|/boot|/dev|/root|/run):' | sed 's|/||'
+      register: chk_5_3_9
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.9"
+          title: "No sensitive host paths mounted in containers"
+          status: "{{ 'WARN' if chk_5_3_9.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Sensitive mounts found: ' + chk_5_3_9.stdout | trim if chk_5_3_9.stdout | trim != '' else 'No sensitive host paths mounted' }}"
+          section: "Container Runtime"
+
+    - name: "[5.3.10] Check restart policy"
+      shell: |
+        docker ps -q | xargs -I{} docker inspect --format '{{ "{{" }}.Name{{ "}}" }} Restart={{ "{{" }}.HostConfig.RestartPolicy.MaximumRetryCount{{ "}}" }}' {} 2>/dev/null \
+          | awk -F'=' '$2 > 5 || $2 == 0 {print $0}' | sed 's|/||'
+      register: chk_5_3_10
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.3.10"
+          title: "Container restart policy is set to max 5 retries"
+          status: "{{ 'WARN' if chk_5_3_10.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Policy issues: ' + chk_5_3_10.stdout | trim if chk_5_3_10.stdout | trim != '' else 'Restart policies look healthy' }}"
+          section: "Container Runtime"
+
+    # ─────────────────────────────────────────────
+    # 5.4 - IMAGE SECURITY
+    # ─────────────────────────────────────────────
+    - name: "[5.4.1] Check for latest tag in running containers"
+      shell: |
+        docker ps --format '{{ "{{" }}.Image{{ "}}" }}' | grep ':latest' || echo ""
+      register: chk_5_4_1
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.4.1"
+          title: "No containers running with 'latest' image tag"
+          status: "{{ 'WARN' if chk_5_4_1.stdout | trim != '' else 'PASS' }}"
+          detail: "{{ 'Latest-tagged images: ' + chk_5_4_1.stdout | trim if chk_5_4_1.stdout | trim != '' else 'No :latest images in use' }}"
+          section: "Image Security"
+
+    - name: "[5.4.2] Check for dangling images"
+      command: docker images -f dangling=true -q
+      register: chk_5_4_2
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.4.2"
+          title: "No dangling (unused) Docker images"
+          status: "{{ 'INFO' if chk_5_4_2.stdout | trim != '' else 'PASS' }}"
+          detail: "Dangling image IDs: {{ chk_5_4_2.stdout_lines | join(', ') if chk_5_4_2.stdout | trim != '' else 'None found' }}"
+          section: "Image Security"
+
+    - name: "[5.4.3] Check Docker Content Trust is enabled"
+      shell: "echo $DOCKER_CONTENT_TRUST"
+      register: chk_5_4_3
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.4.3"
+          title: "Docker Content Trust (DCT) enabled"
+          status: "{{ 'PASS' if chk_5_4_3.stdout | trim == '1' else 'WARN' }}"
+          detail: "DOCKER_CONTENT_TRUST={{ chk_5_4_3.stdout | trim | default('not set') }}"
+          section: "Image Security"
+
+    # ─────────────────────────────────────────────
+    # 5.5 - NETWORK SECURITY
+    # ─────────────────────────────────────────────
+    - name: "[5.5.1] Check for user-defined networks"
+      command: docker network ls --filter type=custom -q
+      register: chk_5_5_1
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.5.1"
+          title: "User-defined networks in use (not default bridge)"
+          status: "{{ 'PASS' if chk_5_5_1.stdout | trim != '' else 'INFO' }}"
+          detail: "Custom networks found: {{ chk_5_5_1.stdout_lines | length }}"
+          section: "Network Security"
+
+    - name: "[5.5.2] Check containers on default bridge network"
+      shell: |
+        docker network inspect bridge --format '{{ "{{" }}range .Containers{{ "}}" }}{{ "{{" }}.Name{{ "}}" }} {{ "{{" }}end{{ "}}" }}' 2>/dev/null
+      register: chk_5_5_2
+      changed_when: false
+      failed_when: false
+
+    - set_fact:
+        audit_results: "{{ audit_results + [item] }}"
+      with_items:
+        - id: "5.5.2"
+          title: "Containers not unnecessarily on default bridge network"
+          status: "{{ 'INFO' if chk_5_5_2.stdout | trim != '' else 'PASS' }}"
+          detail: "Containers on default bridge: {{ chk_5_5_2.stdout | trim | default('none') }}"
+          section: "Network Security"
+
+    # ─────────────────────────────────────────────
+    # GENERATE HTML REPORT
+    # ─────────────────────────────────────────────
+    - name: Count results by status
+      set_fact:
+        pass_count: "{{ audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+        warn_count: "{{ audit_results | selectattr('status', 'equalto', 'WARN') | list | length }}"
+        info_count: "{{ audit_results | selectattr('status', 'equalto', 'INFO') | list | length }}"
+        total_count: "{{ audit_results | length }}"
+
+    - name: Write HTML report
+      copy:
+        dest: "{{ report_file }}"
+        content: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Docker CIS Benchmark Report</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+              :root {
+                --bg: #0a0e1a; --surface: #111827; --surface2: #1a2234;
+                --border: #1e293b; --text: #e2e8f0; --muted: #64748b;
+                --pass: #10b981; --pass-bg: #064e3b22; --pass-border: #10b98133;
+                --warn: #f59e0b; --warn-bg: #78350f22; --warn-border: #f59e0b33;
+                --info: #3b82f6; --info-bg: #1e3a5f22; --info-border: #3b82f633;
+              }
+              * { margin:0; padding:0; box-sizing:border-box; }
+              body { background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; min-height:100vh; }
+              .header { background:var(--surface); border-bottom:1px solid var(--border); padding:32px 48px; display:flex; justify-content:space-between; align-items:center; }
+              .header-title h1 { font-family:'Syne',sans-serif; font-size:28px; font-weight:800; letter-spacing:-0.5px; }
+              .header-title p { color:var(--muted); font-size:12px; margin-top:4px; }
+              .header-meta { text-align:right; font-size:11px; color:var(--muted); line-height:1.8; }
+              .header-meta strong { color:var(--text); }
+              .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:32px 48px; }
+              .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px 24px; }
+              .stat-card .label { font-size:10px; text-transform:uppercase; letter-spacing:2px; color:var(--muted); margin-bottom:8px; }
+              .stat-card .value { font-family:'Syne',sans-serif; font-size:40px; font-weight:800; line-height:1; }
+              .stat-card.pass .value { color:var(--pass); }
+              .stat-card.warn .value { color:var(--warn); }
+              .stat-card.info .value { color:var(--info); }
+              .stat-card.total .value { color:var(--text); }
+              .score-bar { height:4px; background:var(--border); border-radius:2px; margin-top:12px; overflow:hidden; }
+              .score-bar-fill { height:100%; border-radius:2px; }
+              .pass .score-bar-fill { background:var(--pass); width: {{ (pass_count | int / total_count | int * 100) | round }}%; }
+              .warn .score-bar-fill { background:var(--warn); width: {{ (warn_count | int / total_count | int * 100) | round }}%; }
+              .info .score-bar-fill { background:var(--info); width: {{ (info_count | int / total_count | int * 100) | round }}%; }
+              .sections { padding:0 48px 48px; display:flex; flex-direction:column; gap:24px; }
+              .section { background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+              .section-header { padding:16px 24px; background:var(--surface2); border-bottom:1px solid var(--border); font-family:'Syne',sans-serif; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+              .check { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; gap:16px; }
+              .check:last-child { border-bottom:none; }
+              .badge { display:inline-flex; align-items:center; justify-content:center; padding:2px 10px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:1.5px; white-space:nowrap; min-width:52px; }
+              .badge-PASS { background:var(--pass-bg); color:var(--pass); border:1px solid var(--pass-border); }
+              .badge-WARN { background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-border); }
+              .badge-INFO { background:var(--info-bg); color:var(--info); border:1px solid var(--info-border); }
+              .check-content { flex:1; }
+              .check-id { font-size:10px; color:var(--muted); margin-bottom:2px; }
+              .check-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:4px; }
+              .check-detail { font-size:11px; color:var(--muted); line-height:1.6; }
+              .footer { text-align:center; padding:24px; color:var(--muted); font-size:10px; border-top:1px solid var(--border); }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="header-title">
+                <h1>🐳 Docker CIS Benchmark</h1>
+                <p>Section 5 — Security Audit Report</p>
+              </div>
+              <div class="header-meta">
+                <div>Host: <strong>{{ inventory_hostname }}</strong></div>
+                <div>Docker: <strong>{{ docker_version.stdout | trim | default('unknown') }}</strong></div>
+                <div>OS: <strong>{{ ansible_distribution | default('unknown') }} {{ ansible_distribution_version | default('') }}</strong></div>
+                <div>Generated: <strong>{{ ansible_date_time.iso8601 | default('unknown') }}</strong></div>
+              </div>
+            </div>
+
+            <div class="summary">
+              <div class="stat-card total">
+                <div class="label">Total Checks</div>
+                <div class="value">{{ total_count }}</div>
+                <div class="score-bar"><div class="score-bar-fill" style="width:100%;background:var(--border)"></div></div>
+              </div>
+              <div class="stat-card pass">
+                <div class="label">Pass</div>
+                <div class="value">{{ pass_count }}</div>
+                <div class="score-bar"><div class="score-bar-fill"></div></div>
+              </div>
+              <div class="stat-card warn">
+                <div class="label">Warn</div>
+                <div class="value">{{ warn_count }}</div>
+                <div class="score-bar"><div class="score-bar-fill"></div></div>
+              </div>
+              <div class="stat-card info">
+                <div class="label">Info</div>
+                <div class="value">{{ info_count }}</div>
+                <div class="score-bar"><div class="score-bar-fill"></div></div>
+              </div>
+            </div>
+
+            <div class="sections">
+              {% set sections = audit_results | map(attribute='section') | unique | list %}
+              {% for section in sections %}
+              <div class="section">
+                <div class="section-header">{{ section }}</div>
+                {% for check in audit_results if check.section == section %}
+                <div class="check">
+                  <span class="badge badge-{{ check.status }}">{{ check.status }}</span>
+                  <div class="check-content">
+                    <div class="check-id">CIS {{ check.id }}</div>
+                    <div class="check-title">{{ check.title }}</div>
+                    <div class="check-detail">{{ check.detail }}</div>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="footer">
+              Docker CIS Benchmark Audit · Ansible Automated · {{ ansible_date_time.date | default('') }}
+            </div>
+          </body>
+          </html>
+
+    - name: Print audit summary to console
+      debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════╗
+          ║         DOCKER CIS BENCHMARK - SECTION 5            ║
+          ╠══════════════════════════════════════════════════════╣
+          ║  Host    : {{ inventory_hostname | center(42) }} ║
+          ║  Total   : {{ total_count | string | center(42) }} ║
+          ║  [PASS]  : {{ pass_count | string | center(42) }} ║
+          ║  [WARN]  : {{ warn_count | string | center(42) }} ║
+          ║  [INFO]  : {{ info_count | string | center(42) }} ║
+          ╠══════════════════════════════════════════════════════╣
+          {% for check in audit_results %}
+          ║  [{{ check.status | ljust(4) }}] {{ check.id }} - {{ check.title[:38] | ljust(38) }} ║
+          {% endfor %}
+          ╚══════════════════════════════════════════════════════╝
+
+    - name: Print report location
+      debug:
+        msg: "HTML Report saved to: {{ report_file }}"
+
+    - name: Fetch HTML report to Ansible controller
+      fetch:
+        src: "{{ report_file }}"
+        dest: "./docker_benchmark_{{ inventory_hostname }}_{{ ansible_date_time.date }}.html"
+        flat: true
