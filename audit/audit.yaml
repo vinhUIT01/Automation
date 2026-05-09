@@ -28,6 +28,7 @@
       ansible.builtin.command:
         cmd: 'mountpoint -q -- "{{ docker_root_path }}"'
       register: mount_point
+      failed_when: false
       
     - name: Pass / Fail
       ansible.builtin.assert:
@@ -35,6 +36,7 @@
           - mount_point.rc == 0
         success_msg: "[PASS] 1.1 - Separate mount point created"
         fail_msg: "[FAIL] 1.1 - No separate mount point created"
+      failed_when: false
     
     - name: 1.1.2 Ensure only trusted users are allowed to control Docker daemon
       ansible.builtin.command:
@@ -352,14 +354,14 @@
     - name: Check if auditing is enabled for /etc/docker/daemon.json
       ansible.builtin.shell:
         cmd: auditctl -l | grep /etc/docker/daemon.json
-      register: etc_default_docker_command
+      register: docker_daemon_command
       failed_when: false
       when: auditd_present and docker_daemon_stat.stat.exists
 
     - name: Assert if auditing is enabled for /etc/docker/daemon.json
       ansible.builtin.assert:
         that:
-          - etc_default_docker_command.rc == 0
+          - docker_daemon_command.rc == 0
         success_msg: "[PASS] 1.1.11 - Auditing is configured for /etc/docker/daemon.json"
         fail_msg: "[FAIL] 1.1.11 - Auditing is not configured for /etc/docker/daemon.json"
       when: auditd_present and docker_daemon_stat.stat.exists
@@ -384,14 +386,14 @@
     - name: Check if auditing is enabled for /etc/containerd/config.toml
       ansible.builtin.shell:
         cmd: auditctl -l | grep /etc/containerd/config.toml
-      register: etc_default_docker_command
+      register: etc_containerd_config_command
       failed_when: false
       when: auditd_present and containerd_config_stat.stat.exists
 
     - name: Assert if auditing is enabled for /etc/containerd/config.toml
       ansible.builtin.assert:
         that:
-          - etc_default_docker_command.rc == 0
+          - etc_containerd_config_command.rc == 0
         success_msg: "[PASS] 1.1.12 - Auditing is configured for /etc/containerd/config.toml"
         fail_msg: "[FAIL] 1.1.12 - Auditing is not configured for /etc/containerd/config.toml"
       when: auditd_present and containerd_config_stat.stat.exists
@@ -415,15 +417,171 @@
     - name: Check if auditing is enabled for /etc/sysconfig/docker
       ansible.builtin.shell:
         cmd: auditctl -l | grep /etc/sysconfig/docker
-      register: etc_default_docker_command
+      register: sysconfig_docker_command
       failed_when: false
       when: auditd_present and sysconfig_docker_stat.stat.exists
 
     - name: Assert if auditing is enabled for /etc/sysconfig/docker
       ansible.builtin.assert:
         that:
-          - etc_default_docker_command.rc == 0
+          - sysconfig_docker_command.rc == 0
         success_msg: "[PASS] 1.1.13 - Auditing is configured for /etc/sysconfig/docker"
         fail_msg: "[FAIL] 1.1.13 - Auditing is not configured for /etc/sysconfig/docker"
       when: auditd_present and sysconfig_docker_stat.stat.exists
       failed_when: false
+
+    - name: 1.1.14 Ensure auditing is configured for Docker files and directories /usr/bin/containerd
+      ansible.builtin.stat:
+        path: /usr/bin/containerd
+      register: containerd_bin_stat
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.14 - /usr/bin/containerd does not exists"
+      when: not containerd_bin_stat.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.14 - auditd not installed"
+      when: (not auditd_present) and containerd_bin_stat.stat.exists
+
+    - name: Check if auditing is enabled for /usr/bin/containerd
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /usr/bin/containerd
+      register: containered_bin_command
+      failed_when: false
+      when: auditd_present and containerd_bin_stat.stat.exists
+
+    - name: Assert if auditing is enabled for /usr/bin/containerd
+      ansible.builtin.assert:
+        that:
+          - containered_bin_command.rc == 0
+        success_msg: "[PASS] 1.1.14 - Auditing is configured for /usr/bin/containerd"
+        fail_msg: "[FAIL] 1.1.14 - Auditing is not configured for /usr/bin/containerd"
+      when: auditd_present and containerd_bin_stat.stat.exists
+      failed_when: false
+
+    - name: 1.1.15 Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim
+      ansible.builtin.stat:
+        path: /usr/bin/containerd-shim
+      register: containered_shim_stats
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.15 - /usr/bin/containerd-shim does not exists"
+      when: not containered_shim_stats.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.15 - auditd not installed"
+      when: (not auditd_present) and containered_shim_stats.stat.exists
+
+    - name: Check if auditing is enabled for /usr/bin/containerd-shim
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /usr/bin/containerd-shim
+      register: containerd_shim_command
+      failed_when: false
+      when: auditd_present and containered_shim_stats.stat.exists
+
+    - name: Assert if auditing is enabled for /usr/bin/containerd-shim
+      ansible.builtin.assert:
+        that:
+          - containerd_shim_command.rc == 0
+        success_msg: "[PASS] 1.1.15 - Auditing is configured for /usr/bin/containerd-shim"
+        fail_msg: "[FAIL] 1.1.15 - Auditing is not configured for /usr/bin/containerd-shim"
+      when: auditd_present and containered_shim_stats.stat.exists
+      failed_when: false
+
+    - name: 1.1.16 Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim-runc-v1
+      ansible.builtin.stat:
+        path: /usr/bin/containerd-shim-runc-v1
+      register: containered_shim_runc_v1_stats
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.16 - /usr/bin/containerd-shim-runc-v1 does not exists"
+      when: not containered_shim_runc_v1_stats.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.16 - auditd not installed"
+      when: (not auditd_present) and containered_shim_runc_v1_stats.stat.exists
+
+    - name: Check if auditing is enabled for /usr/bin/containerd-shim-runc-v1
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /usr/bin/containerd-shim-runc-v1
+      register: containerd_shim__runc_v1_command
+      failed_when: false
+      when: auditd_present and containered_shim_runc_v1_stats.stat.exists
+
+    - name: Assert if auditing is enabled for /usr/bin/containerd-shim-runc-v1
+      ansible.builtin.assert:
+        that:
+          - containerd_shim__runc_v1_command.rc == 0
+        success_msg: "[PASS] 1.1.16 - Auditing is configured for /usr/bin/containerd-shim-runc-v1"
+        fail_msg: "[FAIL] 1.1.16 - Auditing is not configured for /usr/bin/containerd-shim-runc-v1"
+      when: auditd_present and containered_shim_runc_v1_stats.stat.exists
+      failed_when: false
+
+    - name: 1.1.17 Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim-runc-v2
+      ansible.builtin.stat:
+        path: /usr/bin/containerd-shim-runc-v2
+      register: containered_shim_runc_v2_stats
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.17 - /usr/bin/containerd-shim-runc-v2 does not exists"
+      when: not containered_shim_runc_v2_stats.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.17 - auditd not installed"
+      when: (not auditd_present) and containered_shim_runc_v2_stats.stat.exists
+
+    - name: Check if auditing is enabled for /usr/bin/containerd-shim-runc-v2
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /usr/bin/containerd-shim-runc-v2
+      register: containerd_shim__runc_v2_command
+      failed_when: false
+      when: auditd_present and containered_shim_runc_v2_stats.stat.exists
+
+    - name: Assert if auditing is enabled for /usr/bin/containerd-shim-runc-v2
+      ansible.builtin.assert:
+        that:
+          - containerd_shim__runc_v2_command.rc == 0
+        success_msg: "[PASS] 1.1.17 - Auditing is configured for /usr/bin/containerd-shim-runc-v2"
+        fail_msg: "[FAIL] 1.1.17 - Auditing is not configured for /usr/bin/containerd-shim-runc-v2"
+      when: auditd_present and containered_shim_runc_v2_stats.stat.exists
+      failed_when: false
+
+    - name: 1.1.18 Ensure auditing is configured for Docker files and directories /usr/bin/runc
+      ansible.builtin.stat:
+        path: /usr/bin/runc
+      register: runc_bin_stats
+
+    - name: Info if file doesnt exists
+      ansible.builtin.debug:
+        msg: "[INFO] 1.1.18 - /usr/bin/runc does not exists"
+      when: not runc_bin_stats.stat.exists
+
+    - name: Check auditd not installed
+      ansible.builtin.debug:
+        msg: "[FAIL] 1.1.18 - auditd not installed"
+      when: (not auditd_present) and runc_bin_stats.stat.exists
+
+    - name: Check if auditing is enabled for /usr/bin/runc
+      ansible.builtin.shell:
+        cmd: auditctl -l | grep /usr/bin/runc
+      register: runc_bin_command
+      failed_when: false
+      when: auditd_present and runc_bin_stats.stat.exists
+
+    - name: Assert if auditing is enabled for /usr/bin/runc
+      ansible.builtin.assert:
+        that:
+          - runc_bin_command.rc == 0
+        success_msg: "[PASS] 1.1.18 - Auditing is configured for /usr/bin/runc"
+        fail_msg: "[FAIL] 1.1.18 - Auditing is not configured for /usr/bin/runc"
+      when: auditd_present and runc_bin_stats.stat.exists
+      failed_when: false
+...
