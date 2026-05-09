@@ -584,4 +584,27 @@
         fail_msg: "[FAIL] 1.1.18 - Auditing is not configured for /usr/bin/runc"
       when: auditd_present and runc_bin_stats.stat.exists
       failed_when: false
+
+    - name: 1.2.1 Ensure the container host has been Hardened
+      ansible.builtin.debug:
+        msg: "[INFO] 1.2.1 - Ensure the container host has been Hardened"
+    
+    - name: 1.2.2 Ensure that the version of Docker is up to date
+      ansible.builtin.apt:
+        update_cache: true
+    - name: Check if new updates are available for docker
+      ansible.builtin.command:
+        cmd: apt list --upgradeable
+      register: apt_list_command
+    - name: Assert new updates for docker
+      ansible.builtin.assert:
+        success_msg: "[FAIL] 1.2.2 - There are new updates for Docker"
+        that:
+          - apt_list_command.stdout is regex('^docker-ce/', multiline=True)
+          - apt_list_command.stdout is regex('^docker-ce-cli/', multiline=True)
+          - apt_list_command.stdout is regex('^containerd.io/', multiline=True)
+          - apt_list_command.stdout is regex('^docker-buildx-plugin/', multiline=True)
+          - apt_list_command.stdout is regex('^docker-compose-plugin/', multiline=True)
+        fail_msg: "[PASS] 1.2.2 - There are no new updates for Docker"
+      failed_when: false
 ...
