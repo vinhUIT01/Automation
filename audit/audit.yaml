@@ -2,6 +2,12 @@
   hosts: docker
   become: true
   vars:
+    report_dir: /tmp/cis_docker_benchmark
+    report_file: "{{ report_dir }}/cis_benchmark_report.xlsx"
+    json_file: "{{ report_dir }}/cis_benchmark_results.json"
+    python_script: "{{ report_dir }}/generate_report.py"
+    # Accumulates one entry per check during the play
+    audit_results: []
   tasks:
     - name: 1.1.1 Ensure a separate partition for containers has been created
       ansible.builtin.command:
@@ -34,9 +40,21 @@
       ansible.builtin.assert:
         that:
           - mount_point.rc == 0
-        success_msg: "[PASS] 1.1 - Separate mount point created"
-        fail_msg: "[FAIL] 1.1 - No separate mount point created"
+        success_msg: "[PASS] 1.1.1 - Separate mount point created"
+        fail_msg: "[FAIL] 1.1.1 - No separate mount point created"
+      register: assert_1_1_1
       failed_when: false
+
+    - name: "1.1.1 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.1',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure a separate partition for containers has been created',
+          'status': 'PASS' if mount_point.rc == 0 else 'FAIL',
+          'details': '[PASS] 1.1.1 - Separate mount point created' if mount_point.rc == 0
+                     else '[FAIL] 1.1.1 - No separate mount point created'
+        }] }}"
     
     - name: 1.1.2 Ensure only trusted users are allowed to control Docker daemon
       ansible.builtin.command:
@@ -48,6 +66,16 @@
         msg: |
           [INFO] 1.1.2 - 
           Users in docker group:\n {{ docker_group.stdout }}
+
+    - name: "1.1.2 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.2',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure only trusted users are allowed to control Docker daemon',
+          'status': 'INFO',
+          'details': '[INFO] 1.1.2 - Manual review required. Docker group members: ' ~ docker_group.stdout | replace('\n',' ')
+        }] }}"
 
     - name: 1.1.3 Ensure auditing is configured for the Docker daemon
       ansible.builtin.shell:
@@ -88,6 +116,18 @@
       when: auditd_present
       failed_when: false
 
+    - name: "1.1.3 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.3',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for the Docker daemon',
+          'status': 'FAIL' if not auditd_present else ('PASS' if auditing_1_1_3.rc == 0 else 'FAIL'),
+          'details': '[FAIL] 1.1.3 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.3 - Auditing is configured for the Docker daemon' if auditing_1_1_3.rc == 0
+                     else '[FAIL] 1.1.3 - Auditing is not configured for the Docker daemon')
+        }] }}"
+
     - name: 1.1.4 Ensure auditing is configured for Docker files and directories /run/containerd
       ansible.builtin.stat:
         path: /run/containerd
@@ -118,6 +158,21 @@
         fail_msg: "[FAIL] 1.1.4 - Auditing is not configured for /run/containerd"
       when: auditd_present and run_containerd_stat.stat.exists
       failed_when: false
+
+    - name: "1.1.4 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.4',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /run/containerd',
+          'status': 'INFO' if not run_containerd_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if auditing_1_1_4.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.4 - /run/containerd does not exist' if not run_containerd_stat.stat.exists
+                     else ('[FAIL] 1.1.4 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.4 - Auditing is configured for /run/containerd' if auditing_1_1_4.rc == 0
+                     else '[FAIL] 1.1.4 - Auditing is not configured for /run/containerd'))
+        }] }}"
 
     - name: 1.1.5 Ensure auditing is configured for Docker files and directories /var/lib/docker
       ansible.builtin.stat:
@@ -150,6 +205,21 @@
       when: auditd_present and var_lib_docker_stat.stat.exists
       failed_when: false
 
+    - name: "1.1.5 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.5',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /var/lib/docker',
+          'status': 'INFO' if not var_lib_docker_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if auditing_1_1_5.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.5 - /var/lib/docker does not exist' if not var_lib_docker_stat.stat.exists
+                     else ('[FAIL] 1.1.5 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.5 - Auditing is configured for /var/lib/docker' if auditing_1_1_5.rc == 0
+                     else '[FAIL] 1.1.5 - Auditing is not configured for /var/lib/docker'))
+        }] }}"
+
     - name: 1.1.6 Ensure auditing is configured for Docker files and directories /etc/docker
       ansible.builtin.stat:
         path: /etc/docker
@@ -181,6 +251,21 @@
       when: auditd_present and etc_docker_stat.stat.exists
       failed_when: false
 
+    - name: "1.1.6 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.6',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /etc/docker',
+          'status': 'INFO' if not etc_docker_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if auditing_1_1_6.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.6 - /etc/docker does not exist' if not etc_docker_stat.stat.exists
+                     else ('[FAIL] 1.1.6 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.6 - Auditing is configured for /etc/docker' if auditing_1_1_6.rc == 0
+                     else '[FAIL] 1.1.6 - Auditing is not configured for /etc/docker'))
+        }] }}"
+
     - name: 1.1.7 Ensure auditing is configured for Docker files and directories docker.service
       ansible.builtin.systemd_service:
         name: docker.service
@@ -189,17 +274,19 @@
     - name: Set fact
       ansible.builtin.set_fact:
         docker_service_path: "{{ docker_service_command.status.FragmentPath }}"
+
     - name: Check audit rule docker.service
       ansible.builtin.shell:
         cmd: auditctl -l | grep {{ docker_service_path }}
       when: auditd_present and docker_service_path != ""
       register: docker_service_auditd
       failed_when: false
-    - name: Asser file not exists
+
+    - name: Assert file not exists
       ansible.builtin.assert:
         that:
           - docker_service_path == ""
-        success_msg: "[INFO] 1.1.7 - Docker.servicefile does not exist"
+        success_msg: "[INFO] 1.1.7 - Docker.service file does not exist"
       failed_when: false
 
     - name: Auditd not installed
@@ -215,6 +302,21 @@
         fail_msg: "[FAIL] 1.1.7 - Auditing is not configured for docker.service"
       failed_when: false
       when: auditd_present and docker_service_path != ""
+
+    - name: "1.1.7 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.7',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories docker.service',
+          'status': 'INFO' if docker_service_path == ''
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if docker_service_auditd.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.7 - Docker.service file does not exist' if docker_service_path == ''
+                     else ('[FAIL] 1.1.7 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.7 - Auditing is configured for docker.service' if docker_service_auditd.rc == 0
+                     else '[FAIL] 1.1.7 - Auditing is not configured for docker.service'))
+        }] }}"
 
     - name: 1.1.8 Ensure auditing is configured for Docker files and directories containerd.sock
       ansible.builtin.stat:
@@ -247,6 +349,21 @@
       when: auditd_present and containered_stats.stat.exists
       failed_when: false
 
+    - name: "1.1.8 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.8',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories containerd.sock',
+          'status': 'INFO' if not containered_stats.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if containerd_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.8 - Containerd.sock does not exist' if not containered_stats.stat.exists
+                     else ('[FAIL] 1.1.8 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.8 - Auditing is configured for containerd.sock' if containerd_command.rc == 0
+                     else '[FAIL] 1.1.8 - Auditing is not configured for containerd.sock'))
+        }] }}"
+
     - name: 1.1.9 Ensure auditing is configured for Docker files and directories - docker.socket
       ansible.builtin.systemd_service:
         name: docker.socket
@@ -276,6 +393,7 @@
         path: "{{ docker_socket_path }}"
       register: docker_socket_file
       when: docker_socket_command.status.FragmentPath != ""
+
     - name: Assert file does not exist
       ansible.builtin.assert:
         that:
@@ -304,6 +422,22 @@
         fail_msg: "[FAIL] 1.1.9 - Auditing is not configured for the Docker socket"
       when: auditd_present and (docker_socket_command.status.FragmentPath != "") and docker_socket_file.stat.exists
       failed_when: false
+
+    - name: "1.1.9 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.9',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories - docker.socket',
+          'status': 'INFO' if (docker_socket_command.status.FragmentPath == '' or not docker_socket_file.stat.exists)
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if auditing_1_1_9.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.9 - Docker.socket does not exist'
+                     if (docker_socket_command.status.FragmentPath == '' or not docker_socket_file.stat.exists)
+                     else ('[FAIL] 1.1.9 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.9 - Auditing is configured for the Docker socket' if auditing_1_1_9.rc == 0
+                     else '[FAIL] 1.1.9 - Auditing is not configured for the Docker socket'))
+        }] }}"
 
     - name: 1.1.10 Ensure auditing is configured for Docker files and directories /etc/default/docker
       ansible.builtin.stat:
@@ -336,6 +470,21 @@
       when: auditd_present and etc_default_docker_stat.stat.exists
       failed_when: false
 
+    - name: "1.1.10 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.10',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /etc/default/docker',
+          'status': 'INFO' if not etc_default_docker_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if etc_default_docker_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.10 - /etc/default/docker does not exist' if not etc_default_docker_stat.stat.exists
+                     else ('[FAIL] 1.1.10 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.10 - Auditing is configured for /etc/default/docker' if etc_default_docker_command.rc == 0
+                     else '[FAIL] 1.1.10 - Auditing is not configured for /etc/default/docker'))
+        }] }}"
+
     - name: 1.1.11 Ensure auditing is configured for Docker files and directories /etc/docker/daemon.json
       ansible.builtin.stat:
         path: /etc/docker/daemon.json
@@ -367,6 +516,20 @@
       when: auditd_present and docker_daemon_stat.stat.exists
       failed_when: false
 
+    - name: "1.1.11 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.11',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /etc/docker/daemon.json',
+          'status': 'INFO' if not docker_daemon_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if docker_daemon_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.11 - /etc/docker/daemon.json does not exist' if not docker_daemon_stat.stat.exists
+                     else ('[FAIL] 1.1.11 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.11 - Auditing is configured for /etc/docker/daemon.json' if docker_daemon_command.rc == 0
+                     else '[FAIL] 1.1.11 - Auditing is not configured for /etc/docker/daemon.json'))
+        }] }}"
 
     - name: 1.1.12 Ensure auditing is configured for Docker files and directories /etc/containerd/config.toml
       ansible.builtin.stat:
@@ -399,6 +562,21 @@
       when: auditd_present and containerd_config_stat.stat.exists
       failed_when: false
 
+    - name: "1.1.12 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.12',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /etc/containerd/config.toml',
+          'status': 'INFO' if not containerd_config_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if etc_containerd_config_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.12 - /etc/containerd/config.toml does not exist' if not containerd_config_stat.stat.exists
+                     else ('[FAIL] 1.1.12 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.12 - Auditing is configured for /etc/containerd/config.toml' if etc_containerd_config_command.rc == 0
+                     else '[FAIL] 1.1.12 - Auditing is not configured for /etc/containerd/config.toml'))
+        }] }}"
+
     - name: 1.1.13 Ensure auditing is configured for Docker files and directories /etc/sysconfig/docker
       ansible.builtin.stat:
         path: /etc/sysconfig/docker
@@ -429,6 +607,21 @@
         fail_msg: "[FAIL] 1.1.13 - Auditing is not configured for /etc/sysconfig/docker"
       when: auditd_present and sysconfig_docker_stat.stat.exists
       failed_when: false
+
+    - name: "1.1.13 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.13',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /etc/sysconfig/docker',
+          'status': 'INFO' if not sysconfig_docker_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if sysconfig_docker_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.13 - /etc/sysconfig/docker does not exist' if not sysconfig_docker_stat.stat.exists
+                     else ('[FAIL] 1.1.13 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.13 - Auditing is configured for /etc/sysconfig/docker' if sysconfig_docker_command.rc == 0
+                     else '[FAIL] 1.1.13 - Auditing is not configured for /etc/sysconfig/docker'))
+        }] }}"
 
     - name: 1.1.14 Ensure auditing is configured for Docker files and directories /usr/bin/containerd
       ansible.builtin.stat:
@@ -461,6 +654,21 @@
       when: auditd_present and containerd_bin_stat.stat.exists
       failed_when: false
 
+    - name: "1.1.14 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.14',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /usr/bin/containerd',
+          'status': 'INFO' if not containerd_bin_stat.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if containered_bin_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.14 - /usr/bin/containerd does not exist' if not containerd_bin_stat.stat.exists
+                     else ('[FAIL] 1.1.14 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.14 - Auditing is configured for /usr/bin/containerd' if containered_bin_command.rc == 0
+                     else '[FAIL] 1.1.14 - Auditing is not configured for /usr/bin/containerd'))
+        }] }}"
+
     - name: 1.1.15 Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim
       ansible.builtin.stat:
         path: /usr/bin/containerd-shim
@@ -491,6 +699,21 @@
         fail_msg: "[FAIL] 1.1.15 - Auditing is not configured for /usr/bin/containerd-shim"
       when: auditd_present and containered_shim_stats.stat.exists
       failed_when: false
+
+    - name: "1.1.15 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.15',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim',
+          'status': 'INFO' if not containered_shim_stats.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if containerd_shim_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.15 - /usr/bin/containerd-shim does not exist' if not containered_shim_stats.stat.exists
+                     else ('[FAIL] 1.1.15 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.15 - Auditing is configured for /usr/bin/containerd-shim' if containerd_shim_command.rc == 0
+                     else '[FAIL] 1.1.15 - Auditing is not configured for /usr/bin/containerd-shim'))
+        }] }}"
 
     - name: 1.1.16 Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim-runc-v1
       ansible.builtin.stat:
@@ -523,6 +746,21 @@
       when: auditd_present and containered_shim_runc_v1_stats.stat.exists
       failed_when: false
 
+    - name: "1.1.16 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.16',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim-runc-v1',
+          'status': 'INFO' if not containered_shim_runc_v1_stats.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if containerd_shim__runc_v1_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.16 - /usr/bin/containerd-shim-runc-v1 does not exist' if not containered_shim_runc_v1_stats.stat.exists
+                     else ('[FAIL] 1.1.16 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.16 - Auditing is configured for /usr/bin/containerd-shim-runc-v1' if containerd_shim__runc_v1_command.rc == 0
+                     else '[FAIL] 1.1.16 - Auditing is not configured for /usr/bin/containerd-shim-runc-v1'))
+        }] }}"
+
     - name: 1.1.17 Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim-runc-v2
       ansible.builtin.stat:
         path: /usr/bin/containerd-shim-runc-v2
@@ -553,6 +791,21 @@
         fail_msg: "[FAIL] 1.1.17 - Auditing is not configured for /usr/bin/containerd-shim-runc-v2"
       when: auditd_present and containered_shim_runc_v2_stats.stat.exists
       failed_when: false
+
+    - name: "1.1.17 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.17',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /usr/bin/containerd-shim-runc-v2',
+          'status': 'INFO' if not containered_shim_runc_v2_stats.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if containerd_shim__runc_v2_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.17 - /usr/bin/containerd-shim-runc-v2 does not exist' if not containered_shim_runc_v2_stats.stat.exists
+                     else ('[FAIL] 1.1.17 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.17 - Auditing is configured for /usr/bin/containerd-shim-runc-v2' if containerd_shim__runc_v2_command.rc == 0
+                     else '[FAIL] 1.1.17 - Auditing is not configured for /usr/bin/containerd-shim-runc-v2'))
+        }] }}"
 
     - name: 1.1.18 Ensure auditing is configured for Docker files and directories /usr/bin/runc
       ansible.builtin.stat:
@@ -585,17 +838,44 @@
       when: auditd_present and runc_bin_stats.stat.exists
       failed_when: false
 
+    - name: "1.1.18 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.1.18',
+          'section': '1.1 Host Configuration',
+          'title': 'Ensure auditing is configured for Docker files and directories /usr/bin/runc',
+          'status': 'INFO' if not runc_bin_stats.stat.exists
+                    else ('FAIL' if not auditd_present
+                    else ('PASS' if runc_bin_command.rc == 0 else 'FAIL')),
+          'details': '[INFO] 1.1.18 - /usr/bin/runc does not exist' if not runc_bin_stats.stat.exists
+                     else ('[FAIL] 1.1.18 - auditd not installed' if not auditd_present
+                     else ('[PASS] 1.1.18 - Auditing is configured for /usr/bin/runc' if runc_bin_command.rc == 0
+                     else '[FAIL] 1.1.18 - Auditing is not configured for /usr/bin/runc'))
+        }] }}"
+
     - name: 1.2.1 Ensure the container host has been Hardened
       ansible.builtin.debug:
         msg: "[INFO] 1.2.1 - Ensure the container host has been Hardened"
+
+    - name: "1.2.1 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.2.1',
+          'section': '1.2 Docker Installation',
+          'title': 'Ensure the container host has been Hardened',
+          'status': 'INFO',
+          'details': '[INFO] 1.2.1 - Manual review required: verify host hardening via CIS benchmark for the OS'
+        }] }}"
     
     - name: 1.2.2 Ensure that the version of Docker is up to date
       ansible.builtin.apt:
         update_cache: true
+
     - name: Check if new updates are available for docker
       ansible.builtin.command:
         cmd: apt list --upgradeable
       register: apt_list_command
+
     - name: Assert new updates for docker
       ansible.builtin.assert:
         success_msg: "[FAIL] 1.2.2 - There are new updates for Docker"
@@ -606,5 +886,411 @@
           - apt_list_command.stdout is regex('^docker-buildx-plugin/', multiline=True)
           - apt_list_command.stdout is regex('^docker-compose-plugin/', multiline=True)
         fail_msg: "[PASS] 1.2.2 - There are no new updates for Docker"
+      register: assert_1_2_2
       failed_when: false
+
+    # Note: assert success means updates ARE available (FAIL for CIS), assert fail means up to date (PASS for CIS)
+    - name: "1.2.2 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id': '1.2.2',
+          'section': '1.2 Docker Installation',
+          'title': 'Ensure that the version of Docker is up to date',
+          'status': 'TRUE' if assert_1_2_2.failed == false else 'FAIL',
+          'details': '[FAIL] 1.2.2 - Docker updates are available. Update to the latest version.'
+                     if assert_1_2_2.failed == false
+                     else '[PASS] 1.2.2 - Docker is up to date. No pending updates found.'
+        }] }}"
+
+    # ════════════════════════════════════════════════════════════════
+    # REPORTING – write JSON then generate Excel
+    # ════════════════════════════════════════════════════════════════
+
+    - name: "Report | Create report directory"
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: "Report | Ensure openpyxl is installed"
+      ansible.builtin.pip:
+        name: openpyxl
+        state: present
+      failed_when: false
+
+    - name: "Report | Compute summary counts"
+      ansible.builtin.set_fact:
+        summary_pass:  "{{ audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+        summary_fail:  "{{ audit_results | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+        summary_info:  "{{ audit_results | selectattr('status', 'equalto', 'INFO') | list | length }}"
+        summary_total: "{{ audit_results | length }}"
+
+    # ── Step 1: Write JSON file (safe – no data inside Python source) ──
+    - name: "Report | Write JSON results file"
+      ansible.builtin.copy:
+        dest: "{{ json_file }}"
+        mode: '0644'
+        content: "{{ {
+          'meta': {
+            'host':        ansible_hostname,
+            'os':          ansible_distribution ~ ' ' ~ ansible_distribution_version,
+            'generated':   ansible_date_time.iso8601,
+            'pass':        summary_pass  | int,
+            'fail':        summary_fail  | int,
+            'info':        summary_info  | int,
+            'total':       summary_total | int
+          },
+          'results': audit_results
+        } | to_nice_json }}"
+
+    # ── Step 2: Write Python script (only 2 file paths use Jinja2) ──────
+    - name: "Report | Write Excel generator script"
+      ansible.builtin.copy:
+        dest: "{{ python_script }}"
+        mode: '0700'
+        content: |
+          #!/usr/bin/env python3
+          import json
+          from openpyxl import Workbook
+          from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+          from openpyxl.chart import BarChart, PieChart, Reference
+          from openpyxl.chart.series import DataPoint
+
+          JSON_FILE = "{{ json_file }}"
+          OUTPUT    = "{{ report_file }}"
+
+          with open(JSON_FILE) as fh:
+              payload = json.load(fh)
+
+          META    = payload["meta"]
+          RESULTS = payload["results"]
+
+          # ── Palette ────────────────────────────────────────────────────
+          P = dict(
+              NAVY    = "0F3460", DARK    = "1F2D3D", WHITE   = "FFFFFF",
+              PASS_BG = "D6F4DC", PASS_FG = "1A6E2E",
+              FAIL_BG = "FAD7D5", FAIL_FG = "9C2B26",
+              INFO_BG = "FFF8DC", INFO_FG = "7A5800",
+              ALT_ROW = "F6F8FA", BORDER  = "D0D7DE",
+              SEC_BG  = "EBF0F7", SEC_FG  = "2D6A9F",
+          )
+          STATUS = {
+              "PASS": (P["PASS_BG"], P["PASS_FG"], "PASS"),
+              "FAIL": (P["FAIL_BG"], P["FAIL_FG"], "FAIL"),
+              "INFO": (P["INFO_BG"], P["INFO_FG"], "INFO"),
+          }
+
+          def fill(c):      return PatternFill("solid", fgColor=c)
+          def bdr(c=None):
+              s = Side(style="thin", color=c or P["BORDER"])
+              return Border(left=s, right=s, top=s, bottom=s)
+          def font(bold=False, size=10, color="000000", italic=False):
+              return Font(name="Arial", bold=bold, size=size, color=color, italic=italic)
+          def align(h="left", v="center", wrap=True):
+              return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+          def safe(v):
+              return v if isinstance(v, (str, int, float, bool, type(None))) else json.dumps(v)
+
+          wb = Workbook()
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 1 – SUMMARY DASHBOARD
+          # ══════════════════════════════════════════════════════════════
+          ws = wb.active
+          ws.title = "Summary"
+          ws.sheet_view.showGridLines = False
+          ws.column_dimensions["A"].width = 2
+
+          # Title banner
+          ws.merge_cells("B1:L3")
+          c = ws["B1"]
+          c.value     = "CIS Docker Benchmark Audit Report"
+          c.font      = font(bold=True, size=22, color=P["WHITE"])
+          c.fill      = fill(P["NAVY"])
+          c.alignment = align("left", "center", wrap=False)
+          ws.row_dimensions[1].height = 18
+          ws.row_dimensions[2].height = 22
+          ws.row_dimensions[3].height = 18
+
+          # Subtitle bar
+          ws.merge_cells("B4:L4")
+          sub = ws["B4"]
+          sub.value = (f"Host: {META['host']}   |   OS: {META['os']}"
+                       f"   |   Generated: {META['generated']}")
+          sub.font      = font(size=9, color="CCCCCC", italic=True)
+          sub.fill      = fill(P["DARK"])
+          sub.alignment = align("left", "center", wrap=False)
+          ws.row_dimensions[4].height = 16
+
+          ws.row_dimensions[5].height = 12  # spacer
+
+          # ── Stat cards ─────────────────────────────────────────────
+          total = META["total"] or 1
+          pct   = round(META["pass"] / total * 100, 1)
+
+          cards = [
+              ("B","D", "TOTAL CHECKS",    META["total"],  P["DARK"],    P["WHITE"]),
+              ("E","G", "PASSED",          META["pass"],   P["PASS_BG"], P["PASS_FG"]),
+              ("H","J", "FAILED",          META["fail"],   P["FAIL_BG"], P["FAIL_FG"]),
+              ("K","L", "INFO / MANUAL",   META["info"],   P["INFO_BG"], P["INFO_FG"]),
+          ]
+          for c1, c2, label, val, bg, fg in cards:
+              ws.merge_cells(f"{c1}6:{c2}6")
+              lc = ws[f"{c1}6"]
+              lc.value = label
+              lc.font  = font(bold=True, size=8, color="666666")
+              lc.fill  = fill("EAECEF")
+              lc.alignment = align("center", "center", wrap=False)
+              lc.border = bdr()
+              ws.merge_cells(f"{c1}7:{c2}7")
+              vc = ws[f"{c1}7"]
+              vc.value = val
+              vc.font  = font(bold=True, size=28, color=fg)
+              vc.fill  = fill(bg)
+              vc.alignment = align("center", "center", wrap=False)
+              vc.border = bdr()
+          ws.row_dimensions[6].height = 18
+          ws.row_dimensions[7].height = 48
+
+          ws.row_dimensions[8].height = 10  # spacer
+
+          # ── Compliance progress bar (text) ─────────────────────────
+          ws.merge_cells("B9:L9")
+          bar = chr(9608) * int(pct / 5) + chr(9617) * (20 - int(pct / 5))
+          bc = ws["B9"]
+          bc.value = f"  Compliance Score:   {bar}   {pct}%  ({META['pass']} of {META['total']} checks passed)"
+          bc.font  = font(bold=True, size=11, color=P["PASS_FG"] if pct >= 80 else P["FAIL_FG"])
+          bc.fill  = fill("EAF4EA" if pct >= 80 else "FAE8E8")
+          bc.alignment = align("left", "center", wrap=False)
+          bc.border = bdr()
+          ws.row_dimensions[9].height = 28
+
+          ws.row_dimensions[10].height = 12  # spacer
+
+          # ── Quick results table ────────────────────────────────────
+          spans = {"B":("B","C"), "D":("D","H"), "I":("I","I"), "J":("J","L")}
+          HDR = 11
+          for col, hdr in zip(["B","D","I","J"], ["Check ID","Title","Status","Details"]):
+              c1, c2 = spans[col]
+              ws.merge_cells(f"{c1}{HDR}:{c2}{HDR}")
+              cell = ws[f"{col}{HDR}"]
+              cell.value     = hdr
+              cell.font      = font(bold=True, size=10, color=P["WHITE"])
+              cell.fill      = fill(P["DARK"])
+              cell.alignment = align("center", "center", wrap=False)
+              cell.border    = bdr()
+          ws.row_dimensions[HDR].height = 22
+
+          last_section = None
+          row = HDR + 1
+          for result in RESULTS:
+              # Section divider row
+              if result["section"] != last_section:
+                  ws.merge_cells(f"B{row}:L{row}")
+                  sc = ws[f"B{row}"]
+                  sc.value     = result["section"]
+                  sc.font      = font(bold=True, size=10, color=P["SEC_FG"])
+                  sc.fill      = fill(P["SEC_BG"])
+                  sc.alignment = align("left", "center", wrap=False)
+                  sc.border    = bdr()
+                  ws.row_dimensions[row].height = 20
+                  last_section = result["section"]
+                  row += 1
+
+              bg = P["WHITE"] if row % 2 == 0 else P["ALT_ROW"]
+              sbg, sfg, slabel = STATUS.get(result["status"],
+                                            (P["INFO_BG"], P["INFO_FG"], result["status"]))
+              row_data = {
+                  "B": result["id"],
+                  "D": result["title"],
+                  "I": slabel,
+                  "J": result["details"],
+              }
+              for col, val in row_data.items():
+                  c1, c2 = spans[col]
+                  ws.merge_cells(f"{c1}{row}:{c2}{row}")
+                  cell = ws[f"{col}{row}"]
+                  cell.value     = safe(val)
+                  cell.border    = bdr()
+                  cell.alignment = align("center" if col in ("B","I") else "left")
+                  if col == "I":
+                      cell.font = font(bold=True, color=sfg)
+                      cell.fill = fill(sbg)
+                  else:
+                      cell.font = font()
+                      cell.fill = fill(bg)
+              ws.row_dimensions[row].height = 24
+              row += 1
+
+          # Column widths – Summary sheet
+          for col, w in {"B":9,"C":3,"D":14,"E":7,"F":7,"G":7,
+                         "H":7,"I":11,"J":16,"K":16,"L":16}.items():
+              ws.column_dimensions[col].width = w
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 2 – DETAILED RESULTS
+          # ══════════════════════════════════════════════════════════════
+          ws2 = wb.create_sheet("Detailed Results")
+          ws2.sheet_view.showGridLines = False
+          ws2.column_dimensions["A"].width = 2
+
+          det_cols = [
+              ("B","Check ID", 10), ("C","Section",  30),
+              ("D","Title",    52), ("E","Status",    12),
+              ("F","Details",  60),
+          ]
+          for col, label, width in det_cols:
+              c = ws2[f"{col}1"]
+              c.value     = label
+              c.font      = font(bold=True, size=10, color=P["WHITE"])
+              c.fill      = fill(P["DARK"])
+              c.alignment = align("center", "center", wrap=False)
+              c.border    = bdr()
+              ws2.column_dimensions[col].width = width
+          ws2.row_dimensions[1].height = 22
+
+          for i, result in enumerate(RESULTS):
+              r  = i + 2
+              bg = P["WHITE"] if i % 2 == 0 else P["ALT_ROW"]
+              sbg, sfg, slabel = STATUS.get(result["status"],
+                                            (P["INFO_BG"], P["INFO_FG"], result["status"]))
+              det = {
+                  "B": result["id"],       "C": result["section"],
+                  "D": result["title"],    "E": slabel,
+                  "F": result["details"],
+              }
+              for col, val in det.items():
+                  cell = ws2[f"{col}{r}"]
+                  cell.value     = safe(val)
+                  cell.border    = bdr()
+                  cell.alignment = align("center" if col in ("B","E") else "left")
+                  if col == "E":
+                      cell.font = font(bold=True, color=sfg)
+                      cell.fill = fill(sbg)
+                  else:
+                      cell.font = font()
+                      cell.fill = fill(bg)
+              ws2.row_dimensions[r].height = 36
+
+          ws2.freeze_panes = "B2"
+          ws2.auto_filter.ref = f"B1:F{len(RESULTS)+1}"
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 3 – JSON RAW DATA (for traceability)
+          # ══════════════════════════════════════════════════════════════
+          ws3 = wb.create_sheet("Raw JSON")
+          ws3.sheet_view.showGridLines = False
+          ws3.column_dimensions["A"].width = 2
+          ws3.column_dimensions["B"].width = 120
+
+          ws3.merge_cells("B1:B1")
+          hc = ws3["B1"]
+          hc.value     = "Raw JSON Output (audit_data.json)"
+          hc.font      = font(bold=True, size=10, color=P["WHITE"])
+          hc.fill      = fill(P["DARK"])
+          hc.alignment = align("left", "center", wrap=False)
+          hc.border    = bdr()
+          ws3.row_dimensions[1].height = 22
+
+          json_lines = json.dumps(payload, indent=2).splitlines()
+          for i, line in enumerate(json_lines, 2):
+              cell = ws3[f"B{i}"]
+              cell.value     = line
+              cell.font      = Font(name="Courier New", size=9, color="334455")
+              cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=False)
+              ws3.row_dimensions[i].height = 14
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 4 – CHART
+          # ══════════════════════════════════════════════════════════════
+          ws4 = wb.create_sheet("Chart")
+          ws4.sheet_view.showGridLines = False
+          ws4.column_dimensions["A"].width = 2
+
+          chart_data = [
+              ("Status", "Count"),
+              ("PASS",   META["pass"]),
+              ("FAIL",   META["fail"]),
+              ("INFO",   META["info"]),
+          ]
+          for ri, (s, v) in enumerate(chart_data, 1):
+              ws4.cell(row=ri, column=2, value=s)
+              ws4.cell(row=ri, column=3, value=v)
+
+          bar = BarChart()
+          bar.type   = "col"
+          bar.title  = "CIS Benchmark – Results by Status"
+          bar.y_axis.title = "Number of Checks"
+          bar.x_axis.title = "Status"
+          bar.style  = 10
+          bar.width  = 18
+          bar.height = 12
+          bar.add_data(Reference(ws4, min_col=3, max_col=3, min_row=1, max_row=4),
+                       titles_from_data=True)
+          bar.set_categories(Reference(ws4, min_col=2, max_col=2, min_row=2, max_row=4))
+          ws4.add_chart(bar, "B2")
+
+          pie = PieChart()
+          pie.title  = "Pass / Fail / Info Split"
+          pie.style  = 10
+          pie.width  = 14
+          pie.height = 12
+          pie.add_data(Reference(ws4, min_col=3, max_col=3, min_row=1, max_row=4),
+                       titles_from_data=True)
+          pie.set_categories(Reference(ws4, min_col=2, max_col=2, min_row=2, max_row=4))
+          ws4.add_chart(pie, "L2")
+
+          wb.save(OUTPUT)
+          print(f"Report saved: {OUTPUT}")
+
+    # ── Step 3: Run script ───────────────────────────────────────────────
+    - name: "Report | Generate Excel report"
+      ansible.builtin.command: "python3 {{ python_script }}"
+      register: excel_gen
+      changed_when: false
+
+    - name: "Report | Show generator output"
+      ansible.builtin.debug:
+        msg: "{{ excel_gen.stdout }}"
+
+    # ── Step 4: Fetch both files back to controller ──────────────────────
+    - name: "Report | Fetch JSON to controller"
+      ansible.builtin.fetch:
+        src: "{{ json_file }}"
+        dest: "./cis_reports/{{ inventory_hostname }}_cis_benchmark.json"
+        flat: true
+
+    - name: "Report | Fetch Excel to controller"
+      ansible.builtin.fetch:
+        src: "{{ report_file }}"
+        dest: "./cis_reports/{{ inventory_hostname }}_cis_benchmark.xlsx"
+        flat: true
+
+    # ── Step 5: Cleanup temp files ───────────────────────────────────────
+    - name: "Report | Remove temp files from target"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ python_script }}"
+        - "{{ json_file }}"
+
+    # ── Console summary ──────────────────────────────────────────────────
+    - name: "Report | Print console summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌──────────────────────────────────────────────────────┐
+          │   CIS Docker Benchmark – Audit Summary               │
+          ├───────────────┬──────────────────────────────────────┤
+          │ Host          │ {{ ansible_hostname }}
+          │ Total checks  │ {{ summary_total }}
+          │ PASS          │ {{ summary_pass }}
+          │ FAIL          │ {{ summary_fail }}
+          │ INFO          │ {{ summary_info }}
+          │ Excel report  │ {{ report_file }}
+          │ JSON data     │ {{ json_file }}
+          └──────────────────────────────────────────────────────┘
+          {% for r in audit_results %}
+          [{{ r.status }}] {{ r.id }} - {{ r.title }}
+          {% endfor %}
 ...

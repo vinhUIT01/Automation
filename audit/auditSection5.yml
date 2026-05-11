@@ -211,11 +211,269 @@
       set_fact:
         audit_results: "{{ audit_results + [check_5_3] }}"
     
-    # 5.4 Ensure that Linux kernel capabilities are restricted within containers (Manual)
-    # 5.5 Ensure that privileged containers are not used (Manual)
-    # 5.6 Ensure sensitive host system directories are not mounted on containers (Manual)
-    # 5.7 Ensure sshd is not run within containers (Manual)
+    # ──────────────────────────────────────────────
+    # 5.4 – Linux kernel capabilities
+    # ──────────────────────────────────────────────
+    - name: "5.4 | Inspect CapAdd and CapDrop on containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:CapAdd={{ '{{' }}.HostConfig.CapAdd{{ '}}' }} CapDrop={{ '{{' }}.HostConfig.CapDrop{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: caps_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.4 | Detect containers with NET_RAW or dangerous capabilities"
+      set_fact:
+        # Flag any container that has NET_RAW in CapAdd (explicitly granted)
+        # or has an empty CapDrop (dropped nothing at all, retains all defaults)
+        caps_issues: >-
+          {{
+            caps_raw.stdout_lines
+            | select('search', 'NET_RAW')
+            | list
+            + caps_raw.stdout_lines
+            | select('search', 'CapDrop=\[\]')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - caps_raw is defined
+        - caps_raw.rc == 0
+
+    - name: "5.4 | Evaluate kernel capabilities"
+      set_fact:
+        check_5_4:
+          id: "5.4"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that Linux kernel capabilities are restricted within containers"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (caps_issues is defined and caps_issues | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Capability issues detected: ' ~ (caps_issues | join(' | '))
+              if (caps_issues is defined and caps_issues | length > 0) else
+              'All containers have acceptable capability configurations.'
+            }}
+          remediation: >-
+            Drop all capabilities and add back only what is needed:
+            docker run --cap-drop=ALL --cap-add=<NEEDED_CAP> ...
+            At minimum ensure NET_RAW is dropped if not required.
+          raw_output: "{{ caps_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.4 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_4] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.5 – Privileged containers
+    # ──────────────────────────────────────────────
+    - name: "5.5 | Inspect Privileged flag on containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Privileged={{ '{{' }}.HostConfig.Privileged{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: privileged_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.5 | Detect privileged containers"
+      set_fact:
+        privileged_containers: >-
+          {{
+            privileged_raw.stdout_lines
+            | select('search', 'Privileged=true')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - privileged_raw is defined
+        - privileged_raw.rc == 0
+
+    - name: "5.5 | Evaluate privileged containers"
+      set_fact:
+        check_5_5:
+          id: "5.5"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that privileged containers are not used"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (privileged_containers is defined and privileged_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Privileged containers found: ' ~ (privileged_containers | join(' | '))
+              if (privileged_containers is defined and privileged_containers | length > 0) else
+              'No privileged containers detected. All containers return Privileged=false.'
+            }}
+          remediation: >-
+            Remove the --privileged flag from docker run commands.
+            Use specific --cap-add flags for the exact capabilities needed instead.
+          raw_output: "{{ privileged_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.5 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_5] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.6 – Sensitive host directory mounts
+    # ──────────────────────────────────────────────
+
+    # Sensitive host paths that should never be bind-mounted into containers.
+    # These give a container access to critical host filesystem areas.
+    - name: "5.6 | Inspect volume mounts on containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Volumes={{ '{{' }}json .Mounts{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: volumes_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.6 | Parse mounts per container and flag sensitive paths"
+      set_fact:
+        # Check each container line for known sensitive host paths.
+        # The CIS benchmark specifically calls out: /, /boot, /dev, /etc,
+        # /lib, /proc, /sys, /usr as paths that should not be bind-mounted.
+        sensitive_mounts: >-
+          {{
+            volumes_raw.stdout_lines | select('search',
+              '("Source":"\/"|"Source":"\/boot|"Source":"\/dev|'
+              ~ '"Source":"\/etc|"Source":"\/lib|"Source":"\/proc|'
+              ~ '"Source":"\/sys|"Source":"\/usr)'
+            ) | list
+          }}
+        # Additionally flag any mount that is read-write (rw) — informational
+        rw_mounts: >-
+          {{
+            volumes_raw.stdout_lines
+            | select('search', '"RW":true')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - volumes_raw is defined
+        - volumes_raw.rc == 0
+
+    - name: "5.6 | Evaluate volume mounts"
+      set_fact:
+        check_5_6:
+          id: "5.6"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure sensitive host system directories are not mounted on containers"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (sensitive_mounts is defined and sensitive_mounts | length > 0) else
+              'WARN' if (rw_mounts is defined and rw_mounts | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Sensitive host paths mounted: ' ~ (sensitive_mounts | join(' | '))
+              if (sensitive_mounts is defined and sensitive_mounts | length > 0) else
+              'No sensitive paths mounted. Note: ' ~ (rw_mounts | length) ~ ' read-write mount(s) detected - review manually.'
+              if (rw_mounts is defined and rw_mounts | length > 0) else
+              'No sensitive mounts detected.'
+            }}
+          remediation: >-
+            Remove mounts of sensitive host directories (/, /etc, /proc, /sys, /dev etc.).
+            Where mounts are needed, use read-only mode: -v /host/path:/container/path:ro
+          raw_output: "{{ volumes_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.6 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_6] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.7 – SSH daemon inside containers
+    # ──────────────────────────────────────────────
+
+    # SSHd inside a container is a design anti-pattern.
+    # It creates an extra attack surface and bypasses Docker's
+    # exec/attach mechanisms which are the correct way to get a shell.
+    - name: "5.7 | Get list of running container IDs only"
+      command: docker ps --quiet
+      register: running_ids_raw
+      changed_when: false
+      failed_when: false
+
+    - name: "5.7 | Check each running container for sshd process"
+      command: docker exec {{ item }} ps -el
+      register: sshd_check_results
+      changed_when: false
+      failed_when: false
+      # If ps is not in the container image, failed_when:false ensures we skip gracefully
+      loop: "{{ running_ids_raw.stdout_lines }}"
+      when: running_ids_raw.stdout != ""
+
+    - name: "5.7 | Identify containers running sshd"
+      set_fact:
+        sshd_containers: >-
+          {{
+            sshd_check_results.results
+            | selectattr('stdout', 'defined')
+            | selectattr('stdout', 'search', 'sshd')
+            | map(attribute='item')
+            | list
+          }}
+      when:
+        - running_ids_raw.stdout != ""
+        - sshd_check_results is defined
+
+    - name: "5.7 | Evaluate sshd presence"
+      set_fact:
+        check_5_7:
+          id: "5.7"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure sshd is not run within containers"
+          status: >-
+            {{
+              'SKIP' if running_ids_raw.stdout == '' else
+              'FAIL' if (sshd_containers is defined and sshd_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No running containers found.' if running_ids_raw.stdout == '' else
+              'SSHd detected in containers: ' ~ (sshd_containers | join(', '))
+              if (sshd_containers is defined and sshd_containers | length > 0) else
+              'No sshd process found in any running container.'
+            }}
+          remediation: >-
+            Remove sshd from container images. Use docker exec to get shell access:
+            docker exec -it <container_id> /bin/sh
+            Or use docker attach for foreground containers.
+          raw_output: >-
+            {{
+              sshd_check_results.results
+              | selectattr('stdout', 'defined')
+              | map(attribute='stdout')
+              | join('\n---\n')
+              | default('No output')
+              | string
+              if sshd_check_results is defined
+              else 'No containers checked'
+            }}
+
+    - name: "5.7 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_7] }}"
+
     # 5.8 Ensure privileged ports are not mapped within containers (Manual)
+    - name: 
     # 5.9 Ensure that only needed ports are open on the container (Manual)
     # 5.10 Ensure that the host's network namespace is not shared (Manual)
     # 5.11 Ensure that the memory usage for containers is limited (Manual)
