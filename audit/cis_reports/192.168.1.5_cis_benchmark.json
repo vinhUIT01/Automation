@@ -1,7 +1,7 @@
 {
     "meta": {
-        "fail": 0,
-        "generated": "2026-05-11T01:58:04Z",
+        "fail": 1,
+        "generated": "2026-05-11T10:07:21Z",
         "host": "Docker-2204-DA-AUTO",
         "info": 5,
         "os": "Ubuntu 22.04",
@@ -146,7 +146,7 @@
             "details": "[FAIL] 1.2.2 - Docker updates are available. Update to the latest version.",
             "id": "1.2.2",
             "section": "1.2 Docker Installation",
-            "status": "TRUE",
+            "status": "FAIL",
             "title": "Ensure that the version of Docker is up to date"
         }
     ]

@@ -896,7 +896,7 @@
           'id': '1.2.2',
           'section': '1.2 Docker Installation',
           'title': 'Ensure that the version of Docker is up to date',
-          'status': 'TRUE' if assert_1_2_2.failed == false else 'FAIL',
+          'status': 'FAIL' if assert_1_2_2.failed == false else 'PASS',
           'details': '[FAIL] 1.2.2 - Docker updates are available. Update to the latest version.'
                      if assert_1_2_2.failed == false
                      else '[PASS] 1.2.2 - Docker is up to date. No pending updates found.'
