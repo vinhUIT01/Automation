@@ -473,31 +473,429 @@
         audit_results: "{{ audit_results + [check_5_7] }}"
 
     # 5.8 Ensure privileged ports are not mapped within containers (Manual)
-    - name: 
-    # 5.9 Ensure that only needed ports are open on the container (Manual)
-    # 5.10 Ensure that the host's network namespace is not shared (Manual)
-    # 5.11 Ensure that the memory usage for containers is limited (Manual)
-    # 5.12 Ensure that CPU priority is set appropriately on containers (Manual)
-    # 5.13 Ensure that the container's root filesystem is mounted as read only (Manual)
-    # 5.14 Ensure that incoming container traffic is bound to a specific host interface (Manual)
-    # 5.15 Ensure that the 'on-failure' container restart policy is set to '5' (Manual)
-    # 5.16 Ensure that the host's process namespace is not shared (Manual)
-    # 5.17 Ensure that the host's IPC namespace is not shared (Manual)
-    # 5.18 Ensure that host devices are not directly exposed to containers (Manual)
-    # 5.19 Ensure that the default ulimit is overwritten at runtime if needed (Manual)
-    # 5.20 Ensure mount propagation mode is not set to shared (Manual)
-    # 5.21 Ensure that the host's UTS namespace is not shared (Manual)
-    # 5.22 Ensure the default seccomp profile is not Disabled (Manual)
-    # 5.23 Ensure that docker exec commands are not used with the privileged option (Manual)
-    # 5.24 Ensure that docker exec commands are not used with the user=root option (Manual)
-    # 5.25 Ensure that cgroup usage is confirmed (Manual)
-    # 5.26 Ensure that the container is restricted from acquiring additional privileges (Manual)
-    # 5.27 Ensure that container health is checked at runtime (Manual)
-    # 5.28 Ensure that Docker commands always make use of the latest version of their image (Manual)
-    # 5.29 Ensure that the PIDs cgroup limit is used (Manual)
-    # 5.30 Ensure that Docker's default bridge "docker0" is not used (Manual)
-    # 5.31 Ensure that the host's user namespaces are not shared (Manual)
-    # 5.32 Ensure that the Docker socket is not mounted inside any containers (Manual)
+    - name: "Ensure privileged ports are not mapped within containers"
+    - name: "Do not fill this"
+    - name: "5.8 | "
+      setfact:
+        check_5_8:
+        id: "5.8"
+        section: "Section 5 - Container Runtime Security"
+        title: "Ensure privileged ports are not mapped within containers"
+        status: >-
+        details: >-
+        remediation: >-
+        raw_output: >-
+    - name: "5.8 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_8] }}"
+
+# 5.9 Ensure that only needed ports are open on the container (Manual)
+- name: "Ensure that only needed ports are open on the container"
+- name: "Do not fill this"
+- name: "5.9 | "
+  setfact:
+    check_5_9:
+      id: "5.9"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that only needed ports are open on the container"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.9 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_9] }}"
+
+# 5.10 Ensure that the host's network namespace is not shared (Manual)
+- name: "Ensure that the host's network namespace is not shared"
+- name: "Do not fill this"
+- name: "5.10 | "
+  setfact:
+    check_5_10:
+      id: "5.10"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the host's network namespace is not shared"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.10 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_10] }}"
+
+# 5.11 Ensure that the memory usage for containers is limited (Manual)
+- name: "Ensure that the memory usage for containers is limited"
+- name: "Do not fill this"
+- name: "5.11 | "
+  setfact:
+    check_5_11:
+      id: "5.11"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the memory usage for containers is limited"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.11 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_11] }}"
+
+# 5.12 Ensure that CPU priority is set appropriately on containers (Manual)
+- name: "Ensure that CPU priority is set appropriately on containers"
+- name: "Do not fill this"
+- name: "5.12 | "
+  setfact:
+    check_5_12:
+      id: "5.12"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that CPU priority is set appropriately on containers"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.12 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_12] }}"
+
+# 5.13 Ensure that the container's root filesystem is mounted as read only (Manual)
+- name: "Ensure that the container's root filesystem is mounted as read only"
+- name: "Do not fill this"
+- name: "5.13 | "
+  setfact:
+    check_5_13:
+      id: "5.13"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the container's root filesystem is mounted as read only"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.13 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_13] }}"
+
+# 5.14 Ensure that incoming container traffic is bound to a specific host interface (Manual)
+- name: "Ensure that incoming container traffic is bound to a specific host interface"
+- name: "Do not fill this"
+- name: "5.14 | "
+  setfact:
+    check_5_14:
+      id: "5.14"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that incoming container traffic is bound to a specific host interface"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.14 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_14] }}"
+
+# 5.15 Ensure that the 'on-failure' container restart policy is set to '5' (Manual)
+- name: "Ensure that the 'on-failure' container restart policy is set to '5'"
+- name: "Do not fill this"
+- name: "5.15 | "
+  setfact:
+    check_5_15:
+      id: "5.15"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the 'on-failure' container restart policy is set to '5'"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.15 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_15] }}"
+
+# 5.16 Ensure that the host's process namespace is not shared (Manual)
+- name: "Ensure that the host's process namespace is not shared"
+- name: "Do not fill this"
+- name: "5.16 | "
+  setfact:
+    check_5_16:
+      id: "5.16"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the host's process namespace is not shared"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.16 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_16] }}"
+
+# 5.17 Ensure that the host's IPC namespace is not shared (Manual)
+- name: "Ensure that the host's IPC namespace is not shared"
+- name: "Do not fill this"
+- name: "5.17 | "
+  setfact:
+    check_5_17:
+      id: "5.17"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the host's IPC namespace is not shared"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.17 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_17] }}"
+
+# 5.18 Ensure that host devices are not directly exposed to containers (Manual)
+- name: "Ensure that host devices are not directly exposed to containers"
+- name: "Do not fill this"
+- name: "5.18 | "
+  setfact:
+    check_5_18:
+      id: "5.18"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that host devices are not directly exposed to containers"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.18 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_18] }}"
+
+# 5.19 Ensure that the default ulimit is overwritten at runtime if needed (Manual)
+- name: "Ensure that the default ulimit is overwritten at runtime if needed"
+- name: "Do not fill this"
+- name: "5.19 | "
+  setfact:
+    check_5_19:
+      id: "5.19"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the default ulimit is overwritten at runtime if needed"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.19 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_19] }}"
+
+# 5.20 Ensure mount propagation mode is not set to shared (Manual)
+- name: "Ensure mount propagation mode is not set to shared"
+- name: "Do not fill this"
+- name: "5.20 | "
+  setfact:
+    check_5_20:
+      id: "5.20"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure mount propagation mode is not set to shared"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.20 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_20] }}"
+
+# 5.21 Ensure that the host's UTS namespace is not shared (Manual)
+- name: "Ensure that the host's UTS namespace is not shared"
+- name: "Do not fill this"
+- name: "5.21 | "
+  setfact:
+    check_5_21:
+      id: "5.21"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the host's UTS namespace is not shared"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.21 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_21] }}"
+
+# 5.22 Ensure the default seccomp profile is not Disabled (Manual)
+- name: "Ensure the default seccomp profile is not Disabled"
+- name: "Do not fill this"
+- name: "5.22 | "
+  setfact:
+    check_5_22:
+      id: "5.22"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure the default seccomp profile is not Disabled"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.22 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_22] }}"
+
+# 5.23 Ensure that docker exec commands are not used with the privileged option (Manual)
+- name: "Ensure that docker exec commands are not used with the privileged option"
+- name: "Do not fill this"
+- name: "5.23 | "
+  setfact:
+    check_5_23:
+      id: "5.23"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that docker exec commands are not used with the privileged option"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.23 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_23] }}"
+
+# 5.24 Ensure that docker exec commands are not used with the user=root option (Manual)
+- name: "Ensure that docker exec commands are not used with the user=root option"
+- name: "Do not fill this"
+- name: "5.24 | "
+  setfact:
+    check_5_24:
+      id: "5.24"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that docker exec commands are not used with the user=root option"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.24 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_24] }}"
+
+# 5.25 Ensure that cgroup usage is confirmed (Manual)
+- name: "Ensure that cgroup usage is confirmed"
+- name: "Do not fill this"
+- name: "5.25 | "
+  setfact:
+    check_5_25:
+      id: "5.25"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that cgroup usage is confirmed"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.25 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_25] }}"
+
+# 5.26 Ensure that the container is restricted from acquiring additional privileges (Manual)
+- name: "Ensure that the container is restricted from acquiring additional privileges"
+- name: "Do not fill this"
+- name: "5.26 | "
+  setfact:
+    check_5_26:
+      id: "5.26"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the container is restricted from acquiring additional privileges"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.26 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_26] }}"
+
+# 5.27 Ensure that container health is checked at runtime (Manual)
+- name: "Ensure that container health is checked at runtime"
+- name: "Do not fill this"
+- name: "5.27 | "
+  setfact:
+    check_5_27:
+      id: "5.27"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that container health is checked at runtime"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.27 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_27] }}"
+
+# 5.28 Ensure that Docker commands always make use of the latest version of their image (Manual)
+- name: "Ensure that Docker commands always make use of the latest version of their image"
+- name: "Do not fill this"
+- name: "5.28 | "
+  setfact:
+    check_5_28:
+      id: "5.28"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that Docker commands always make use of the latest version of their image"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.28 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_28] }}"
+
+# 5.29 Ensure that the PIDs cgroup limit is used (Manual)
+- name: "Ensure that the PIDs cgroup limit is used"
+- name: "Do not fill this"
+- name: "5.29 | "
+  setfact:
+    check_5_29:
+      id: "5.29"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the PIDs cgroup limit is used"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.29 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_29] }}"
+
+# 5.30 Ensure that Docker's default bridge "docker0" is not used (Manual)
+- name: "Ensure that Docker's default bridge \"docker0\" is not used"
+- name: "Do not fill this"
+- name: "5.30 | "
+  setfact:
+    check_5_30:
+      id: "5.30"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that Docker's default bridge \"docker0\" is not used"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.30 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_30] }}"
+
+# 5.31 Ensure that the host's user namespaces are not shared (Manual)
+- name: "Ensure that the host's user namespaces are not shared"
+- name: "Do not fill this"
+- name: "5.31 | "
+  setfact:
+    check_5_31:
+      id: "5.31"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the host's user namespaces are not shared"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.31 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_31] }}"
+
+# 5.32 Ensure that the Docker socket is not mounted inside any containers (Manual)
+- name: "Ensure that the Docker socket is not mounted inside any containers"
+- name: "Do not fill this"
+- name: "5.32 | "
+  setfact:
+    check_5_32:
+      id: "5.32"
+      section: "Section 5 - Container Runtime Security"
+      title: "Ensure that the Docker socket is not mounted inside any containers"
+      status: >-
+      details: >-
+      remediation: >-
+      raw_output: >-
+- name: "5.32 | Append result"
+  set_fact:
+    audit_results: "{{ audit_results + [check_5_32] }}"
 
 
 
