@@ -1,0 +1,111 @@
+{
+    "meta": {
+        "fail": 2,
+        "generated": "2026-05-12T09:18:27Z",
+        "host": "Docker-2204-DA-AUTO",
+        "info": 7,
+        "os": "Ubuntu 22.04",
+        "pass": 3,
+        "section": "Section 4 - Container Images and Build File",
+        "skip": 0,
+        "total": 12,
+        "warn": 0
+    },
+    "results": [
+        {
+            "details": "[FAIL] 4.1 - Containers running as root: ae6edb4c514a",
+            "id": "4.1",
+            "remediation": "Add a USER instruction to the Dockerfile with a non-root, non-zero UID. Example: RUN groupadd -r appgroup && useradd -r -g appgroup appuser USER appuser",
+            "section": "4 - Container Images and Build File",
+            "status": "FAIL",
+            "title": "Ensure a user for the container has been created"
+        },
+        {
+            "details": "[INFO] 4.2 - Manual check required. Verify all FROM instructions reference images from an approved registry (e.g. Docker Official Images, verified publishers, or your internal registry).",
+            "id": "4.2",
+            "remediation": "Define an approved base image list. Enforce via Dockerfile linting (hadolint) or admission control (OPA/Gatekeeper). Enable Docker Content Trust.",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure containers use only trusted base images"
+        },
+        {
+            "details": "[INFO] 4.3 - Manual check required. Inspect each image layer with docker history --no-trunc and audit installed packages.",
+            "id": "4.3",
+            "remediation": "Use multi-stage builds to keep final images minimal. Start from distroless or Alpine base images. Remove package manager caches: RUN apt-get install ... && rm -rf /var/lib/apt/lists/*",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure unnecessary packages are not installed in the container"
+        },
+        {
+            "details": "[INFO] 4.4 - Manual check required. Verify images are scanned with a vulnerability scanner and rebuilt when CVEs are published.",
+            "id": "4.4",
+            "remediation": "Integrate docker scout, Trivy, or Grype into CI pipelines. Set up automated rebuilds when base image CVEs are published. Pin base image digests and update them on a regular schedule.",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure images are scanned and rebuilt to include security patches"
+        },
+        {
+            "details": "[PASS] 4.5 - Docker Content Trust is enabled (DOCKER_CONTENT_TRUST=1)",
+            "id": "4.5",
+            "remediation": "Set the environment variable before running docker commands: export DOCKER_CONTENT_TRUST=1 Add it to /etc/environment or the docker service unit for persistent enforcement.",
+            "section": "4 - Container Images and Build File",
+            "status": "PASS",
+            "title": "Ensure Content trust for Docker is Enabled"
+        },
+        {
+            "details": "[FAIL] 4.6 - Images missing HEALTHCHECK: 1881968aff6f",
+            "id": "4.6",
+            "remediation": "Add a HEALTHCHECK instruction to every Dockerfile: HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/health || exit 1",
+            "section": "4 - Container Images and Build File",
+            "status": "FAIL",
+            "title": "Ensure HEALTHCHECK instructions have been added to container images"
+        },
+        {
+            "details": "[PASS] 4.7 - No standalone update instructions found in image history.",
+            "id": "4.7",
+            "remediation": "Always combine RUN apt-get update with apt-get install in the same RUN instruction to prevent Docker layer cache from serving stale package lists: RUN apt-get update && apt-get install -y <packages>",
+            "section": "4 - Container Images and Build File",
+            "status": "PASS",
+            "title": "Ensure update instructions are not used alone in the Dockerfile"
+        },
+        {
+            "details": "[INFO] 4.8 - Manual check required.",
+            "id": "4.8",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure setuid and setgid permissions are removed in images"
+        },
+        {
+            "details": "[PASS] 4.9 - No ADD instructions found. COPY used correctly.",
+            "id": "4.9",
+            "remediation": "Replace ADD with COPY in all Dockerfiles. ADD is only needed for: (1) auto-extracting tar archives, (2) fetching remote URLs. For everything else, COPY is explicit and safer.",
+            "section": "4 - Container Images and Build File",
+            "status": "PASS",
+            "title": "Ensure COPY is used instead of ADD in Dockerfiles"
+        },
+        {
+            "details": "[INFO] 4.10 - Manual check required. Scan image history and Dockerfiles for hardcoded credentials, API keys, or tokens.",
+            "id": "4.10",
+            "remediation": "Use Docker BuildKit secrets for build-time secrets: RUN --mount=type=secret,id=mysecret cat /run/secrets/mysecret Use environment variables or a secrets manager (Vault, AWS SSM) at runtime. Scan images with truffleHog or gitleaks before pushing to a registry.",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure secrets are not stored in Dockerfiles"
+        },
+        {
+            "details": "[INFO] 4.11 - Manual check required. Verify all packages are installed from trusted, pinned sources with signature verification enabled.",
+            "id": "4.11",
+            "remediation": "Pin package versions in Dockerfiles: RUN apt-get install -y nginx=1.24.0-1 Verify GPG signatures for third-party packages before installing. Use a private mirror or Artifactory to control what packages are available.",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure only verified packages are installed in the container"
+        },
+        {
+            "details": "[INFO] 4.12 - Manual check required. Verify that all images and artifacts are cryptographically signed and signatures are validated before use.",
+            "id": "4.12",
+            "remediation": "Enable Docker Content Trust (DOCKER_CONTENT_TRUST=1). Use Notary or Sigstore/cosign to sign and verify images: cosign sign --key cosign.key registry/image:tag cosign verify --key cosign.pub registry/image:tag",
+            "section": "4 - Container Images and Build File",
+            "status": "INFO",
+            "title": "Ensure all signed artifacts are validated"
+        }
+    ]
+}

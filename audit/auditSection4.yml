@@ -2,12 +2,35 @@
 - name: "Section 4 - Container Images and Build File"
   hosts: docker
   become: true
-  gather_facts: false
+  gather_facts: true
+
+  vars:
+    report_dir: /tmp/docker_benchmark
+    report_base: "./docker_benchmark_reports"
+    json_file:   "{{ report_dir }}/section4_results.json"
+    xlsx_file:   "{{ report_dir }}/section4_report.xlsx"
+    py_script:   "{{ report_dir }}/section4_report.py"
+    audit_results: []
 
   tasks:
 
     # ──────────────────────────────────────────────
-    # 4.1 - Ensure a user for the container has been created
+    # Pre-flight
+    # ──────────────────────────────────────────────
+    - name: "Pre | Create temp report directory"
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: "Pre | Ensure openpyxl is installed"
+      ansible.builtin.pip:
+        name: openpyxl
+        state: present
+      failed_when: false
+
+    # ──────────────────────────────────────────────
+    # 4.1 – Ensure a user for the container has been created
     # ──────────────────────────────────────────────
     - name: "4.1 | Get running containers"
       ansible.builtin.command: docker ps -q
@@ -16,7 +39,8 @@
       failed_when: false
 
     - name: "4.1 | Get User config for each running container"
-      ansible.builtin.command: "docker inspect --format 'User={{ '{{' }}.Config.User{{ '}}' }}' {{ item }}"
+      ansible.builtin.command: >
+        docker inspect --format 'User={{ '{{' }}.Config.User{{ '}}' }}' {{ item }}
       loop: "{{ running_containers.stdout_lines }}"
       register: container_users
       changed_when: false
@@ -40,33 +64,89 @@
             [PASS] 4.1 - All containers run as non-root user
           {%- endif -%}
 
-    - name: "4.1 | Result"
+    - name: "4.1 | Debug"
       ansible.builtin.debug:
         msg: "{{ result_4_1 }}"
 
+    - name: "4.1 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.1',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure a user for the container has been created',
+          'status':  'INFO' if running_containers.stdout == ''
+                     else ('FAIL' if result_4_1 is search('FAIL') else 'PASS'),
+          'details': result_4_1 | string,
+          'remediation': 'Add a USER instruction to the Dockerfile with a non-root, non-zero UID.
+            Example: RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+                     USER appuser'
+        }] }}"
+
     # ──────────────────────────────────────────────
-    # 4.2 - Ensure containers use only trusted base images (Manual)
+    # 4.2 – Trusted base images (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.2 | Result"
+    - name: "4.2 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.2',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure containers use only trusted base images',
+          'status':  'INFO',
+          'details': '[INFO] 4.2 - Manual check required. Verify all FROM instructions reference
+            images from an approved registry (e.g. Docker Official Images, verified publishers,
+            or your internal registry).',
+          'remediation': 'Define an approved base image list. Enforce via Dockerfile linting
+            (hadolint) or admission control (OPA/Gatekeeper). Enable Docker Content Trust.'
+        }] }}"
+
+    - name: "4.2 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.2 - Ensure that containers use only trusted base images: Manual check required"
 
     # ──────────────────────────────────────────────
-    # 4.3 - Ensure unnecessary packages are not installed (Manual)
+    # 4.3 – Unnecessary packages not installed (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.3 | Result"
+    - name: "4.3 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.3',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure unnecessary packages are not installed in the container',
+          'status':  'INFO',
+          'details': '[INFO] 4.3 - Manual check required. Inspect each image layer with
+            docker history --no-trunc and audit installed packages.',
+          'remediation': 'Use multi-stage builds to keep final images minimal.
+            Start from distroless or Alpine base images.
+            Remove package manager caches: RUN apt-get install ... && rm -rf /var/lib/apt/lists/*'
+        }] }}"
+
+    - name: "4.3 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.3 - Ensure that unnecessary packages are not installed in the container: Manual check required"
 
     # ──────────────────────────────────────────────
-    # 4.4 - Ensure images are scanned and rebuilt to include security patches (Manual)
+    # 4.4 – Images scanned and rebuilt for patches (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.4 | Result"
+    - name: "4.4 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.4',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure images are scanned and rebuilt to include security patches',
+          'status':  'INFO',
+          'details': '[INFO] 4.4 - Manual check required. Verify images are scanned with a
+            vulnerability scanner and rebuilt when CVEs are published.',
+          'remediation': 'Integrate docker scout, Trivy, or Grype into CI pipelines.
+            Set up automated rebuilds when base image CVEs are published.
+            Pin base image digests and update them on a regular schedule.'
+        }] }}"
+
+    - name: "4.4 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.4 - Ensure images are scanned and rebuilt to include security patches: Manual check required"
 
     # ──────────────────────────────────────────────
-    # 4.5 - Ensure Content trust for Docker is Enabled
+    # 4.5 – Docker Content Trust enabled
     # ──────────────────────────────────────────────
     - name: "4.5 | Get DOCKER_CONTENT_TRUST"
       ansible.builtin.shell: echo "${DOCKER_CONTENT_TRUST}"
@@ -74,17 +154,33 @@
       changed_when: false
       failed_when: false
 
-    - name: "4.5 | Result"
+    - name: "4.5 | Debug"
       ansible.builtin.debug:
         msg: >-
           {{
             '[PASS] 4.5 - Docker Content Trust is enabled'
-            if docker_content_trust.stdout == '1'
+            if docker_content_trust.stdout | trim == '1'
             else '[FAIL] 4.5 - Docker Content Trust is NOT enabled (DOCKER_CONTENT_TRUST != 1)'
           }}
 
+    - name: "4.5 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.5',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure Content trust for Docker is Enabled',
+          'status':  'PASS' if docker_content_trust.stdout | trim == '1' else 'FAIL',
+          'details': '[PASS] 4.5 - Docker Content Trust is enabled (DOCKER_CONTENT_TRUST=1)'
+                     if docker_content_trust.stdout | trim == '1'
+                     else '[FAIL] 4.5 - DOCKER_CONTENT_TRUST is not set to 1 (current value: '
+                          ~ (docker_content_trust.stdout | trim | default('unset')) ~ ')',
+          'remediation': 'Set the environment variable before running docker commands:
+            export DOCKER_CONTENT_TRUST=1
+            Add it to /etc/environment or the docker service unit for persistent enforcement.'
+        }] }}"
+
     # ──────────────────────────────────────────────
-    # 4.6 - Ensure HEALTHCHECK instructions have been added to container images
+    # 4.6 – HEALTHCHECK in container images
     # ──────────────────────────────────────────────
     - name: "4.6 | Get all local Docker images"
       ansible.builtin.command: docker images -q
@@ -99,6 +195,7 @@
       register: image_healthchecks
       changed_when: false
       failed_when: false
+      when: all_images.stdout != ""
 
     - name: "4.6 | Evaluate result"
       ansible.builtin.set_fact:
@@ -108,18 +205,37 @@
             | selectattr('stdout', 'search', '<nil>')
             | map(attribute='item') | list
           }}
+      when: all_images.stdout != ""
 
-    - name: "4.6 | Result"
+    - name: "4.6 | Debug"
       ansible.builtin.debug:
         msg: >-
           {{
             '[PASS] 4.6 - All images have HEALTHCHECK defined'
-            if check_4_6_no_health | length == 0
+            if (check_4_6_no_health is not defined or check_4_6_no_health | length == 0)
             else '[FAIL] 4.6 - Images missing HEALTHCHECK: ' + (check_4_6_no_health | join(', '))
           }}
 
+    - name: "4.6 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.6',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure HEALTHCHECK instructions have been added to container images',
+          'status':  'SKIP' if all_images.stdout == ''
+                     else ('FAIL' if (check_4_6_no_health is defined and check_4_6_no_health | length > 0)
+                     else 'PASS'),
+          'details': '[SKIP] 4.6 - No local images found.' if all_images.stdout == ''
+                     else ('[FAIL] 4.6 - Images missing HEALTHCHECK: ' ~ (check_4_6_no_health | join(', '))
+                     if (check_4_6_no_health is defined and check_4_6_no_health | length > 0)
+                     else '[PASS] 4.6 - All images have HEALTHCHECK defined.'),
+          'remediation': 'Add a HEALTHCHECK instruction to every Dockerfile:
+            HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+              CMD curl -f http://localhost/health || exit 1'
+        }] }}"
+
     # ──────────────────────────────────────────────
-    # 4.7 - Ensure update instructions are not used alone in the Dockerfile
+    # 4.7 – Update instructions not used alone
     # ──────────────────────────────────────────────
     - name: "4.7 | Check image history for standalone update instructions"
       ansible.builtin.shell: >
@@ -128,6 +244,7 @@
       register: image_update_history
       changed_when: false
       failed_when: false
+      when: all_images.stdout != ""
 
     - name: "4.7 | Evaluate result"
       ansible.builtin.set_fact:
@@ -137,25 +254,55 @@
             | selectattr('stdout', 'ne', '')
             | map(attribute='item') | list
           }}
+      when: all_images.stdout != ""
 
-    - name: "4.7 | Result"
+    - name: "4.7 | Debug"
       ansible.builtin.debug:
         msg: >-
           {{
             '[PASS] 4.7 - No standalone update instructions found in image history'
-            if check_4_7_update_images | length == 0
+            if (check_4_7_update_images is not defined or check_4_7_update_images | length == 0)
             else '[INFO] 4.7 - Update instructions found in: ' + (check_4_7_update_images | join(', '))
           }}
 
+    - name: "4.7 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.7',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure update instructions are not used alone in the Dockerfile',
+          'status':  'SKIP' if all_images.stdout == ''
+                     else ('WARN' if (check_4_7_update_images is defined and check_4_7_update_images | length > 0)
+                     else 'PASS'),
+          'details': '[SKIP] 4.7 - No local images found.' if all_images.stdout == ''
+                     else ('[WARN] 4.7 - Standalone update instructions found in images: '
+                           ~ (check_4_7_update_images | join(', '))
+                     if (check_4_7_update_images is defined and check_4_7_update_images | length > 0)
+                     else '[PASS] 4.7 - No standalone update instructions found in image history.'),
+          'remediation': 'Always combine RUN apt-get update with apt-get install in the same RUN instruction
+            to prevent Docker layer cache from serving stale package lists:
+            RUN apt-get update && apt-get install -y <packages>'
+        }] }}"
+
     # ──────────────────────────────────────────────
-    # 4.8 - Ensure setuid and setgid permissions are removed (Manual)
+    # 4.8 – setuid or setgid permissions removed (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.8 | Result"
+    - name: "4.8 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.8',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure setuid and setgid permissions are removed in images',
+          'status':  'INFO',
+          'details': '[INFO] 4.8 - Manual check required.'
+        }] }}"
+
+    - name: "4.8 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.8 - Ensure setuid and setgid permissions are removed: Manual check required"
 
     # ──────────────────────────────────────────────
-    # 4.9 - Ensure COPY is used instead of ADD in Dockerfiles
+    # 4.9 – COPY used instead of ADD
     # ──────────────────────────────────────────────
     - name: "4.9 | Check image history for ADD instruction"
       ansible.builtin.shell: >
@@ -165,6 +312,7 @@
       register: image_add_history
       changed_when: false
       failed_when: false
+      when: all_images.stdout != ""
 
     - name: "4.9 | Evaluate result"
       ansible.builtin.set_fact:
@@ -174,33 +322,473 @@
             | selectattr('stdout', 'eq', 'FOUND')
             | map(attribute='item') | list
           }}
+      when: all_images.stdout != ""
 
-    - name: "4.9 | Result"
+    - name: "4.9 | Debug"
       ansible.builtin.debug:
         msg: >-
           {{
             '[PASS] 4.9 - No ADD instruction found, COPY is used correctly'
-            if check_4_9_add_images | length == 0
+            if (check_4_9_add_images is not defined or check_4_9_add_images | length == 0)
             else '[INFO] 4.9 - ADD instruction found in: ' + (check_4_9_add_images | join(', '))
           }}
 
+    - name: "4.9 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.9',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure COPY is used instead of ADD in Dockerfiles',
+          'status':  'SKIP' if all_images.stdout == ''
+                     else ('WARN' if (check_4_9_add_images is defined and check_4_9_add_images | length > 0)
+                     else 'PASS'),
+          'details': '[SKIP] 4.9 - No local images found.' if all_images.stdout == ''
+                     else ('[WARN] 4.9 - ADD instruction found in images: '
+                           ~ (check_4_9_add_images | join(', '))
+                     if (check_4_9_add_images is defined and check_4_9_add_images | length > 0)
+                     else '[PASS] 4.9 - No ADD instructions found. COPY used correctly.'),
+          'remediation': 'Replace ADD with COPY in all Dockerfiles.
+            ADD is only needed for: (1) auto-extracting tar archives, (2) fetching remote URLs.
+            For everything else, COPY is explicit and safer.'
+        }] }}"
+
     # ──────────────────────────────────────────────
-    # 4.10 - Ensure secrets are not stored in Dockerfiles (Manual)
+    # 4.10 – Secrets not stored in Dockerfiles (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.10 | Result"
+    - name: "4.10 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.10',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure secrets are not stored in Dockerfiles',
+          'status':  'INFO',
+          'details': '[INFO] 4.10 - Manual check required. Scan image history and Dockerfiles
+            for hardcoded credentials, API keys, or tokens.',
+          'remediation': 'Use Docker BuildKit secrets for build-time secrets:
+            RUN --mount=type=secret,id=mysecret cat /run/secrets/mysecret
+            Use environment variables or a secrets manager (Vault, AWS SSM) at runtime.
+            Scan images with truffleHog or gitleaks before pushing to a registry.'
+        }] }}"
+
+    - name: "4.10 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.10 - Ensure secrets are not stored in Dockerfiles: Manual check required"
 
     # ──────────────────────────────────────────────
-    # 4.11 - Ensure only verified packages are installed (Manual)
+    # 4.11 – Only verified packages installed (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.11 | Result"
+    - name: "4.11 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.11',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure only verified packages are installed in the container',
+          'status':  'INFO',
+          'details': '[INFO] 4.11 - Manual check required. Verify all packages are installed
+            from trusted, pinned sources with signature verification enabled.',
+          'remediation': 'Pin package versions in Dockerfiles:
+            RUN apt-get install -y nginx=1.24.0-1
+            Verify GPG signatures for third-party packages before installing.
+            Use a private mirror or Artifactory to control what packages are available.'
+        }] }}"
+
+    - name: "4.11 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.11 - Ensure only verified packages are installed: Manual check required"
 
     # ──────────────────────────────────────────────
-    # 4.12 - Ensure all signed artifacts are validated (Manual)
+    # 4.12 – All signed artifacts validated (Manual)
     # ──────────────────────────────────────────────
-    - name: "4.12 | Result"
+    - name: "4.12 | Collect result"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '4.12',
+          'section': '4 - Container Images and Build File',
+          'title':   'Ensure all signed artifacts are validated',
+          'status':  'INFO',
+          'details': '[INFO] 4.12 - Manual check required. Verify that all images and artifacts
+            are cryptographically signed and signatures are validated before use.',
+          'remediation': 'Enable Docker Content Trust (DOCKER_CONTENT_TRUST=1).
+            Use Notary or Sigstore/cosign to sign and verify images:
+            cosign sign --key cosign.key registry/image:tag
+            cosign verify --key cosign.pub registry/image:tag'
+        }] }}"
+
+    - name: "4.12 | Debug"
       ansible.builtin.debug:
         msg: "[INFO] 4.12 - Ensure all signed artifacts are validated: Manual check required"
+
+    # ════════════════════════════════════════════════════════════════
+    # REPORTING
+    # ════════════════════════════════════════════════════════════════
+
+    - name: "Report | Compute summary counts"
+      ansible.builtin.set_fact:
+        summary_pass:  "{{ audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+        summary_fail:  "{{ audit_results | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+        summary_warn:  "{{ audit_results | selectattr('status', 'equalto', 'WARN') | list | length }}"
+        summary_info:  "{{ audit_results | selectattr('status', 'equalto', 'INFO') | list | length }}"
+        summary_skip:  "{{ audit_results | selectattr('status', 'equalto', 'SKIP') | list | length }}"
+        summary_total: "{{ audit_results | length }}"
+
+    # ── Step 1: Write JSON data file ─────────────────────────────────────
+    - name: "Report | Write JSON results file to target"
+      ansible.builtin.copy:
+        dest: "{{ json_file }}"
+        mode: '0644'
+        content: "{{ {
+          'meta': {
+            'section':   'Section 4 - Container Images and Build File',
+            'host':      ansible_hostname,
+            'os':        ansible_distribution ~ ' ' ~ ansible_distribution_version,
+            'generated': ansible_date_time.iso8601,
+            'pass':  summary_pass  | int,
+            'fail':  summary_fail  | int,
+            'warn':  summary_warn  | int,
+            'info':  summary_info  | int,
+            'skip':  summary_skip  | int,
+            'total': summary_total | int
+          },
+          'results': audit_results
+        } | to_nice_json }}"
+
+    # ── Step 2: Write Excel generator script ─────────────────────────────
+    - name: "Report | Write Excel generator script to target"
+      ansible.builtin.copy:
+        dest: "{{ py_script }}"
+        mode: '0700'
+        content: |
+          #!/usr/bin/env python3
+          import json
+          from openpyxl import Workbook
+          from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+          from openpyxl.chart import BarChart, Reference
+
+          JSON_FILE = "{{ json_file }}"
+          OUTPUT    = "{{ xlsx_file }}"
+
+          with open(JSON_FILE) as fh:
+              payload = json.load(fh)
+
+          META    = payload["meta"]
+          RESULTS = payload["results"]
+
+          # ── Palette ────────────────────────────────────────────────────
+          P = dict(
+              NAVY    = "0F3460", DARK    = "1F2D3D", WHITE   = "FFFFFF",
+              PASS_BG = "D6F4DC", PASS_FG = "1A6E2E",
+              FAIL_BG = "FAD7D5", FAIL_FG = "9C2B26",
+              WARN_BG = "FFF3CD", WARN_FG = "856404",
+              INFO_BG = "D0E8FF", INFO_FG = "1A4E8A",
+              SKIP_BG = "EEEEEE", SKIP_FG = "666666",
+              ALT_ROW = "F6F8FA", BORDER  = "D0D7DE",
+              SEC_BG  = "EBF0F7", SEC_FG  = "2D6A9F",
+          )
+          STATUS = {
+              "PASS": (P["PASS_BG"], P["PASS_FG"], "PASS"),
+              "FAIL": (P["FAIL_BG"], P["FAIL_FG"], "FAIL"),
+              "WARN": (P["WARN_BG"], P["WARN_FG"], "WARN"),
+              "INFO": (P["INFO_BG"], P["INFO_FG"], "INFO"),
+              "SKIP": (P["SKIP_BG"], P["SKIP_FG"], "SKIP"),
+          }
+
+          def fill(c):      return PatternFill("solid", fgColor=c)
+          def bdr(c=None):
+              s = Side(style="thin", color=c or P["BORDER"])
+              return Border(left=s, right=s, top=s, bottom=s)
+          def font(bold=False, size=10, color="000000", italic=False):
+              return Font(name="Arial", bold=bold, size=size, color=color, italic=italic)
+          def align(h="left", v="center", wrap=True):
+              return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+          def safe(v):
+              return v if isinstance(v, (str, int, float, bool, type(None))) else json.dumps(v)
+
+          wb = Workbook()
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 1 – SUMMARY DASHBOARD
+          # ══════════════════════════════════════════════════════════════
+          ws = wb.active
+          ws.title = "Summary"
+          ws.sheet_view.showGridLines = False
+          ws.column_dimensions["A"].width = 2
+
+          # Title banner (rows 1-3)
+          ws.merge_cells("B1:M3")
+          c = ws["B1"]
+          c.value     = "CIS Docker Benchmark  –  Section 4  –  Container Images and Build File"
+          c.font      = font(bold=True, size=18, color=P["WHITE"])
+          c.fill      = fill(P["NAVY"])
+          c.alignment = align("left", "center", wrap=False)
+          ws.row_dimensions[1].height = 16
+          ws.row_dimensions[2].height = 20
+          ws.row_dimensions[3].height = 16
+
+          # Subtitle bar (row 4)
+          ws.merge_cells("B4:M4")
+          sub = ws["B4"]
+          sub.value = (f"Host: {META['host']}   |   OS: {META['os']}"
+                       f"   |   Generated: {META['generated']}")
+          sub.font      = font(size=9, color="BBBBBB", italic=True)
+          sub.fill      = fill(P["DARK"])
+          sub.alignment = align("left", "center", wrap=False)
+          ws.row_dimensions[4].height = 15
+          ws.row_dimensions[5].height = 10  # spacer
+
+          # Stat cards (rows 6-7) — 5 cards across B-M
+          total = META["total"] or 1
+          pct   = round(META["pass"] / total * 100, 1)
+          cards = [
+              ("B","C",  "TOTAL",  META["total"],  P["DARK"],    P["WHITE"]),
+              ("D","E",  "PASSED", META["pass"],   P["PASS_BG"], P["PASS_FG"]),
+              ("F","G",  "FAILED", META["fail"],   P["FAIL_BG"], P["FAIL_FG"]),
+              ("H","I",  "WARN",   META["warn"],   P["WARN_BG"], P["WARN_FG"]),
+              ("J","K",  "INFO",   META["info"],   P["INFO_BG"], P["INFO_FG"]),
+              ("L","M",  "SKIP",   META["skip"],   P["SKIP_BG"], P["SKIP_FG"]),
+          ]
+          for c1, c2, label, val, bg, fg in cards:
+              ws.merge_cells(f"{c1}6:{c2}6")
+              lc = ws[f"{c1}6"]
+              lc.value     = label
+              lc.font      = font(bold=True, size=8, color="555555")
+              lc.fill      = fill("EAECEF")
+              lc.alignment = align("center", "center", wrap=False)
+              lc.border    = bdr()
+              ws.merge_cells(f"{c1}7:{c2}7")
+              vc = ws[f"{c1}7"]
+              vc.value     = val
+              vc.font      = font(bold=True, size=26, color=fg)
+              vc.fill      = fill(bg)
+              vc.alignment = align("center", "center", wrap=False)
+              vc.border    = bdr()
+          ws.row_dimensions[6].height = 18
+          ws.row_dimensions[7].height = 44
+          ws.row_dimensions[8].height = 10  # spacer
+
+          # Compliance bar (row 9)
+          bar_txt = chr(9608) * int(pct / 5) + chr(9617) * (20 - int(pct / 5))
+          ws.merge_cells("B9:M9")
+          bc = ws["B9"]
+          bc.value     = f"  Compliance Score:   {bar_txt}   {pct}%  ({META['pass']} of {total} checks passed)"
+          bc.font      = font(bold=True, size=11,
+                              color=P["PASS_FG"] if pct >= 80 else
+                                    P["WARN_FG"] if pct >= 50 else P["FAIL_FG"])
+          bc.fill      = fill("EAF4EA" if pct >= 80 else
+                              "FFF8E1" if pct >= 50 else "FAE8E8")
+          bc.alignment = align("left", "center", wrap=False)
+          bc.border    = bdr()
+          ws.row_dimensions[9].height = 28
+          ws.row_dimensions[10].height = 12  # spacer
+
+          # Results table header (row 11)
+          # Column spans: B-C=ID, D-G=Title, H-H=Status, I-M=Details
+          HDR = 11
+          spans = {"B":("B","C"), "D":("D","G"), "H":("H","H"), "I":("I","M")}
+          for col, hdr in zip(["B","D","H","I"],
+                               ["Check ID","Title","Status","Details"]):
+              c1, c2 = spans[col]
+              ws.merge_cells(f"{c1}{HDR}:{c2}{HDR}")
+              cell = ws[f"{col}{HDR}"]
+              cell.value     = hdr
+              cell.font      = font(bold=True, size=10, color=P["WHITE"])
+              cell.fill      = fill(P["DARK"])
+              cell.alignment = align("center", "center", wrap=False)
+              cell.border    = bdr()
+          ws.row_dimensions[HDR].height = 22
+
+          # Data rows (row 12 onward)
+          for i, result in enumerate(RESULTS):
+              r  = HDR + 1 + i
+              bg = P["WHITE"] if i % 2 == 0 else P["ALT_ROW"]
+              sbg, sfg, slabel = STATUS.get(result["status"],
+                                            (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
+              row_data = {
+                  "B": result["id"],
+                  "D": result["title"],
+                  "H": slabel,
+                  "I": result["details"],
+              }
+              for col, val in row_data.items():
+                  c1, c2 = spans[col]
+                  ws.merge_cells(f"{c1}{r}:{c2}{r}")
+                  cell = ws[f"{col}{r}"]
+                  cell.value     = safe(val)
+                  cell.border    = bdr()
+                  cell.alignment = align("center" if col in ("B","H") else "left")
+                  if col == "H":
+                      cell.font = font(bold=True, color=sfg)
+                      cell.fill = fill(sbg)
+                  else:
+                      cell.font = font()
+                      cell.fill = fill(bg)
+              ws.row_dimensions[r].height = 36
+
+          # Column widths – Summary
+          for col, w in {"B":7,"C":4,"D":16,"E":7,"F":7,"G":7,
+                         "H":11,"I":16,"J":16,"K":16,"L":16,"M":16}.items():
+              ws.column_dimensions[col].width = w
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 2 – DETAILED RESULTS (with Remediation column)
+          # ══════════════════════════════════════════════════════════════
+          ws2 = wb.create_sheet("Detailed Results")
+          ws2.sheet_view.showGridLines = False
+          ws2.column_dimensions["A"].width = 2
+
+          det_cols = [
+              ("B","Check ID",    10),
+              ("C","Section",     30),
+              ("D","Title",       42),
+              ("E","Status",      12),
+              ("F","Details",     50),
+              ("G","Remediation", 55),
+          ]
+          for col, label, width in det_cols:
+              c = ws2[f"{col}1"]
+              c.value     = label
+              c.font      = font(bold=True, size=10, color=P["WHITE"])
+              c.fill      = fill(P["DARK"])
+              c.alignment = align("center", "center", wrap=False)
+              c.border    = bdr()
+              ws2.column_dimensions[col].width = width
+          ws2.row_dimensions[1].height = 22
+
+          for i, result in enumerate(RESULTS):
+              r  = i + 2
+              bg = P["WHITE"] if i % 2 == 0 else P["ALT_ROW"]
+              sbg, sfg, slabel = STATUS.get(result["status"],
+                                            (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
+              det = {
+                  "B": result["id"],
+                  "C": result["section"],
+                  "D": result["title"],
+                  "E": slabel,
+                  "F": result["details"],
+                  "G": result.get("remediation", ""),
+              }
+              for col, val in det.items():
+                  cell = ws2[f"{col}{r}"]
+                  cell.value     = safe(val)
+                  cell.border    = bdr()
+                  cell.alignment = align("center" if col in ("B","E") else "left")
+                  if col == "E":
+                      cell.font = font(bold=True, color=sfg)
+                      cell.fill = fill(sbg)
+                  else:
+                      cell.font = font()
+                      cell.fill = fill(bg)
+              ws2.row_dimensions[r].height = 52
+
+          ws2.freeze_panes = "B2"
+          ws2.auto_filter.ref = f"B1:G{len(RESULTS)+1}"
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 3 – CHART
+          # ══════════════════════════════════════════════════════════════
+          ws3 = wb.create_sheet("Chart")
+          ws3.sheet_view.showGridLines = False
+          ws3.column_dimensions["A"].width = 2
+
+          chart_rows = [
+              ("Status","Count"),
+              ("PASS",  META["pass"]),
+              ("FAIL",  META["fail"]),
+              ("WARN",  META["warn"]),
+              ("INFO",  META["info"]),
+              ("SKIP",  META["skip"]),
+          ]
+          for ri, (s, v) in enumerate(chart_rows, 1):
+              ws3.cell(row=ri, column=2, value=s)
+              ws3.cell(row=ri, column=3, value=v)
+
+          chart = BarChart()
+          chart.type         = "col"
+          chart.title        = "Section 4 – Audit Results by Status"
+          chart.y_axis.title = "Number of Checks"
+          chart.x_axis.title = "Status"
+          chart.style        = 10
+          chart.width        = 20
+          chart.height       = 14
+          chart.add_data(Reference(ws3, min_col=3, max_col=3, min_row=1, max_row=6),
+                         titles_from_data=True)
+          chart.set_categories(Reference(ws3, min_col=2, max_col=2, min_row=2, max_row=6))
+          ws3.add_chart(chart, "B2")
+
+          # ══════════════════════════════════════════════════════════════
+          # Sheet 4 – RAW JSON
+          # ══════════════════════════════════════════════════════════════
+          ws4 = wb.create_sheet("Raw JSON")
+          ws4.sheet_view.showGridLines = False
+          ws4.column_dimensions["A"].width = 2
+          ws4.column_dimensions["B"].width = 120
+
+          hc = ws4["B1"]
+          hc.value     = "Raw JSON Output  –  section4_results.json"
+          hc.font      = font(bold=True, size=10, color=P["WHITE"])
+          hc.fill      = fill(P["DARK"])
+          hc.alignment = align("left", "center", wrap=False)
+          hc.border    = bdr()
+          ws4.row_dimensions[1].height = 22
+
+          for i, line in enumerate(json.dumps(payload, indent=2).splitlines(), 2):
+              cell = ws4[f"B{i}"]
+              cell.value     = line
+              cell.font      = Font(name="Courier New", size=9, color="334455")
+              cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=False)
+              ws4.row_dimensions[i].height = 14
+
+          wb.save(OUTPUT)
+          print(f"Report saved: {OUTPUT}")
+
+    # ── Step 3: Run the script ────────────────────────────────────────────
+    - name: "Report | Generate Excel report"
+      ansible.builtin.command: "python3 {{ py_script }}"
+      register: excel_gen
+      changed_when: false
+
+    - name: "Report | Generator output"
+      ansible.builtin.debug:
+        msg: "{{ excel_gen.stdout }}"
+
+    # ── Step 4: Fetch both files to controller ────────────────────────────
+    - name: "Report | Fetch JSON to controller"
+      ansible.builtin.fetch:
+        src:  "{{ json_file }}"
+        dest: "{{ report_base }}/{{ inventory_hostname }}_section4.json"
+        flat: true
+
+    - name: "Report | Fetch Excel to controller"
+      ansible.builtin.fetch:
+        src:  "{{ xlsx_file }}"
+        dest: "{{ report_base }}/{{ inventory_hostname }}_section4.xlsx"
+        flat: true
+
+    # ── Step 5: Cleanup temp files from target ────────────────────────────
+    - name: "Report | Remove temp files from target"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ py_script }}"
+        - "{{ json_file }}"
+
+    # ── Console summary ───────────────────────────────────────────────────
+    - name: "Report | Console summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌──────────────────────────────────────────────────────────┐
+          │   CIS Docker Benchmark – Section 4 Summary               │
+          ├───────────────┬──────────────────────────────────────────┤
+          │ Host          │ {{ ansible_hostname }}
+          │ Total checks  │ {{ summary_total }}
+          │ PASS          │ {{ summary_pass }}
+          │ FAIL          │ {{ summary_fail }}
+          │ WARN          │ {{ summary_warn }}
+          │ INFO          │ {{ summary_info }}
+          │ SKIP          │ {{ summary_skip }}
+          ├───────────────┴──────────────────────────────────────────┤
+          │ Output → {{ report_base }}/{{ inventory_hostname }}_section4.[json|xlsx]
+          └──────────────────────────────────────────────────────────┘
+          {% for r in audit_results %}
+          [{{ r.status }}] {{ r.id }} – {{ r.title }}
+          {% endfor %}

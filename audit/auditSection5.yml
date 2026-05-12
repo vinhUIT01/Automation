@@ -473,429 +473,1397 @@
         audit_results: "{{ audit_results + [check_5_7] }}"
 
     # 5.8 Ensure privileged ports are not mapped within containers (Manual)
-    - name: "Ensure privileged ports are not mapped within containers"
-    - name: "Do not fill this"
-    - name: "5.8 | "
-      setfact:
-        check_5_8:
-        id: "5.8"
-        section: "Section 5 - Container Runtime Security"
-        title: "Ensure privileged ports are not mapped within containers"
-        status: >-
-        details: >-
-        remediation: >-
-        raw_output: >-
-    - name: "5.8 | Append result"
+    - name: "5.8 | Get running container IDs"
+      command: docker ps --quiet
+      register: running_ids
+      changed_when: false
+      failed_when: false
+      
+    
+    # - name: "Ensure privileged ports are not mapped within containers"
+    # - name: "Do not fill this"
+    # - name: "5.8 | "
+    #   setfact:
+    #     check_5_8:
+    #     id: "5.8"
+    #     section: "Section 5 - Container Runtime Security"
+    #     title: "Ensure privileged ports are not mapped within containers"
+    #     status: >-
+    #     details: >-
+    #     remediation: >-
+    #     raw_output: >-
+    # - name: "5.8 | Append result"
+    #   set_fact:
+    #     audit_results: "{{ audit_results + [check_5_8] }}"
+        # 5.9 – Only needed ports are open on container
+    # ──────────────────────────────────────────────
+    # Checks EXPOSED ports declared in the image vs what's actually published.
+    # A port exposed but not published is low risk; a port published to 0.0.0.0
+    # when it shouldn't be is the real concern — flag those for manual review.
+    - name: "5.9 | Inspect exposed and published ports per container"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Exposed={{ '{{' }}json .Config.ExposedPorts{{ '}}' }} Published={{ '{{' }}json .NetworkSettings.Ports{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: ports_9_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.9 | Flag containers publishing to 0.0.0.0 (all interfaces)"
       set_fact:
-        audit_results: "{{ audit_results + [check_5_8] }}"
+        ports_all_interfaces: >-
+          {{
+            ports_9_raw.stdout_lines
+            | select('search', '"HostIp":"0.0.0.0"')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - ports_9_raw is defined
+        - ports_9_raw.rc == 0
 
-# 5.9 Ensure that only needed ports are open on the container (Manual)
-- name: "Ensure that only needed ports are open on the container"
-- name: "Do not fill this"
-- name: "5.9 | "
-  setfact:
-    check_5_9:
-      id: "5.9"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that only needed ports are open on the container"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.9 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_9] }}"
+    - name: "5.9 | Evaluate open ports"
+      set_fact:
+        check_5_9:
+          id: "5.9"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that only needed ports are open on the container"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'WARN' if (ports_all_interfaces is defined and ports_all_interfaces | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              (ports_all_interfaces | length | string) ~ ' container(s) publish ports on 0.0.0.0. Review whether all published ports are required: ' ~ (ports_all_interfaces | map('regex_replace', ':Exposed=.*', '') | join(', '))
+              if (ports_all_interfaces is defined and ports_all_interfaces | length > 0) else
+              'No containers are publishing ports on all interfaces.'
+            }}
+          remediation: >-
+            Bind published ports to a specific host IP instead of 0.0.0.0.
+            Use -p 127.0.0.1:<host_port>:<container_port> for internal-only services.
+            Remove EXPOSE directives from Dockerfiles for ports not required at runtime.
+          raw_output: "{{ ports_9_raw.stdout | default('No containers') | string }}"
 
-# 5.10 Ensure that the host's network namespace is not shared (Manual)
-- name: "Ensure that the host's network namespace is not shared"
-- name: "Do not fill this"
-- name: "5.10 | "
-  setfact:
-    check_5_10:
-      id: "5.10"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the host's network namespace is not shared"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.10 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_10] }}"
+    - name: "5.9 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_9] }}"
 
-# 5.11 Ensure that the memory usage for containers is limited (Manual)
-- name: "Ensure that the memory usage for containers is limited"
-- name: "Do not fill this"
-- name: "5.11 | "
-  setfact:
-    check_5_11:
-      id: "5.11"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the memory usage for containers is limited"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.11 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_11] }}"
+    # ──────────────────────────────────────────────
+    # 5.10 – Host network namespace not shared
+    # ──────────────────────────────────────────────
+    # --network=host removes all network isolation: the container shares the
+    # host's network stack directly, seeing all interfaces and open ports.
+    - name: "5.10 | Inspect NetworkMode on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:NetworkMode={{ '{{' }}.HostConfig.NetworkMode{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: netmode_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
 
-# 5.12 Ensure that CPU priority is set appropriately on containers (Manual)
-- name: "Ensure that CPU priority is set appropriately on containers"
-- name: "Do not fill this"
-- name: "5.12 | "
-  setfact:
-    check_5_12:
-      id: "5.12"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that CPU priority is set appropriately on containers"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.12 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_12] }}"
+    - name: "5.10 | Detect containers using host network"
+      set_fact:
+        host_network_containers: >-
+          {{
+            netmode_raw.stdout_lines
+            | select('search', 'NetworkMode=host')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - netmode_raw is defined
+        - netmode_raw.rc == 0
 
-# 5.13 Ensure that the container's root filesystem is mounted as read only (Manual)
-- name: "Ensure that the container's root filesystem is mounted as read only"
-- name: "Do not fill this"
-- name: "5.13 | "
-  setfact:
-    check_5_13:
-      id: "5.13"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the container's root filesystem is mounted as read only"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.13 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_13] }}"
+    - name: "5.10 | Evaluate host network namespace"
+      set_fact:
+        check_5_10:
+          id: "5.10"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the host's network namespace is not shared"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (host_network_containers is defined and host_network_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers sharing the host network namespace: ' ~ (host_network_containers | join(' | '))
+              if (host_network_containers is defined and host_network_containers | length > 0) else
+              'No containers are using --network=host.'
+            }}
+          remediation: >-
+            Remove --network=host from docker run commands.
+            Use Docker bridge or overlay networks and publish only the specific
+            ports required with -p <host_port>:<container_port>.
+          raw_output: "{{ netmode_raw.stdout | default('No containers') | string }}"
 
-# 5.14 Ensure that incoming container traffic is bound to a specific host interface (Manual)
-- name: "Ensure that incoming container traffic is bound to a specific host interface"
-- name: "Do not fill this"
-- name: "5.14 | "
-  setfact:
-    check_5_14:
-      id: "5.14"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that incoming container traffic is bound to a specific host interface"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.14 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_14] }}"
+    - name: "5.10 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_10] }}"
 
-# 5.15 Ensure that the 'on-failure' container restart policy is set to '5' (Manual)
-- name: "Ensure that the 'on-failure' container restart policy is set to '5'"
-- name: "Do not fill this"
-- name: "5.15 | "
-  setfact:
-    check_5_15:
-      id: "5.15"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the 'on-failure' container restart policy is set to '5'"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.15 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_15] }}"
+    # ──────────────────────────────────────────────
+    # 5.11 – Memory usage limited
+    # ──────────────────────────────────────────────
+    # Without a memory limit a single container can exhaust host RAM causing
+    # an OOM kill of other containers or the Docker daemon itself.
+    # Memory == 0 means no limit is set.
+    - name: "5.11 | Inspect memory limits on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Memory={{ '{{' }}.HostConfig.Memory{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: memory_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
 
-# 5.16 Ensure that the host's process namespace is not shared (Manual)
-- name: "Ensure that the host's process namespace is not shared"
-- name: "Do not fill this"
-- name: "5.16 | "
-  setfact:
-    check_5_16:
-      id: "5.16"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the host's process namespace is not shared"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.16 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_16] }}"
+    - name: "5.11 | Detect containers with no memory limit"
+      set_fact:
+        unlimited_memory: >-
+          {{
+            memory_raw.stdout_lines
+            | select('search', ':Memory=0$')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - memory_raw is defined
+        - memory_raw.rc == 0
 
-# 5.17 Ensure that the host's IPC namespace is not shared (Manual)
-- name: "Ensure that the host's IPC namespace is not shared"
-- name: "Do not fill this"
-- name: "5.17 | "
-  setfact:
-    check_5_17:
-      id: "5.17"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the host's IPC namespace is not shared"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.17 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_17] }}"
+    - name: "5.11 | Evaluate memory limits"
+      set_fact:
+        check_5_11:
+          id: "5.11"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the memory usage for containers is limited"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (unlimited_memory is defined and unlimited_memory | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with no memory limit (Memory=0): ' ~ (unlimited_memory | join(' | '))
+              if (unlimited_memory is defined and unlimited_memory | length > 0) else
+              'All containers have a memory limit configured.'
+            }}
+          remediation: >-
+            Set a memory limit when starting containers:
+            docker run --memory=<limit> (e.g. --memory=512m)
+            Or set default memory limits in /etc/docker/daemon.json under "default-ulimits".
+          raw_output: "{{ memory_raw.stdout | default('No containers') | string }}"
 
-# 5.18 Ensure that host devices are not directly exposed to containers (Manual)
-- name: "Ensure that host devices are not directly exposed to containers"
-- name: "Do not fill this"
-- name: "5.18 | "
-  setfact:
-    check_5_18:
-      id: "5.18"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that host devices are not directly exposed to containers"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.18 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_18] }}"
+    - name: "5.11 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_11] }}"
 
-# 5.19 Ensure that the default ulimit is overwritten at runtime if needed (Manual)
-- name: "Ensure that the default ulimit is overwritten at runtime if needed"
-- name: "Do not fill this"
-- name: "5.19 | "
-  setfact:
-    check_5_19:
-      id: "5.19"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the default ulimit is overwritten at runtime if needed"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.19 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_19] }}"
+    # ──────────────────────────────────────────────
+    # 5.12 – CPU priority set appropriately
+    # ──────────────────────────────────────────────
+    # CpuShares=0 means the container inherits Docker's default (1024).
+    # Leaving all containers at default means no prioritisation is defined —
+    # a runaway container can starve others. Any explicit non-zero value shows
+    # the operator has made a deliberate decision.
+    - name: "5.12 | Inspect CPU shares on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:CpuShares={{ '{{' }}.HostConfig.CpuShares{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: cpu_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
 
-# 5.20 Ensure mount propagation mode is not set to shared (Manual)
-- name: "Ensure mount propagation mode is not set to shared"
-- name: "Do not fill this"
-- name: "5.20 | "
-  setfact:
-    check_5_20:
-      id: "5.20"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure mount propagation mode is not set to shared"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.20 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_20] }}"
+    - name: "5.12 | Detect containers with default (0) CPU shares"
+      set_fact:
+        default_cpu: >-
+          {{
+            cpu_raw.stdout_lines
+            | select('search', ':CpuShares=0$')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - cpu_raw is defined
+        - cpu_raw.rc == 0
 
-# 5.21 Ensure that the host's UTS namespace is not shared (Manual)
-- name: "Ensure that the host's UTS namespace is not shared"
-- name: "Do not fill this"
-- name: "5.21 | "
-  setfact:
-    check_5_21:
-      id: "5.21"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the host's UTS namespace is not shared"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.21 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_21] }}"
+    - name: "5.12 | Evaluate CPU priority"
+      set_fact:
+        check_5_12:
+          id: "5.12"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that CPU priority is set appropriately on containers"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'WARN' if (default_cpu is defined and default_cpu | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              (default_cpu | length | string) ~ ' container(s) using default CPU shares (0). Explicit prioritisation is recommended: ' ~ (default_cpu | map('regex_replace', ':CpuShares=.*', '') | join(', '))
+              if (default_cpu is defined and default_cpu | length > 0) else
+              'All containers have explicit CPU shares configured.'
+            }}
+          remediation: >-
+            Set CPU shares relative to other containers using:
+            docker run --cpu-shares=<value>
+            Default is 1024. Lower values get less CPU time under contention.
+            Consider also --cpus= to set a hard CPU quota.
+          raw_output: "{{ cpu_raw.stdout | default('No containers') | string }}"
 
-# 5.22 Ensure the default seccomp profile is not Disabled (Manual)
-- name: "Ensure the default seccomp profile is not Disabled"
-- name: "Do not fill this"
-- name: "5.22 | "
-  setfact:
-    check_5_22:
-      id: "5.22"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure the default seccomp profile is not Disabled"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.22 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_22] }}"
+    - name: "5.12 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_12] }}"
 
-# 5.23 Ensure that docker exec commands are not used with the privileged option (Manual)
-- name: "Ensure that docker exec commands are not used with the privileged option"
-- name: "Do not fill this"
-- name: "5.23 | "
-  setfact:
-    check_5_23:
-      id: "5.23"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that docker exec commands are not used with the privileged option"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.23 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_23] }}"
+    # ──────────────────────────────────────────────
+    # 5.13 – Root filesystem mounted read-only
+    # ──────────────────────────────────────────────
+    # ReadonlyRootfs=false means the container's root filesystem is writable.
+    # Making it read-only forces all writes through explicitly declared volumes
+    # and prevents an attacker from modifying container binaries at runtime.
+    - name: "5.13 | Inspect ReadonlyRootfs on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:ReadonlyRootfs={{ '{{' }}.HostConfig.ReadonlyRootfs{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: rootfs_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
 
-# 5.24 Ensure that docker exec commands are not used with the user=root option (Manual)
-- name: "Ensure that docker exec commands are not used with the user=root option"
-- name: "Do not fill this"
-- name: "5.24 | "
-  setfact:
-    check_5_24:
-      id: "5.24"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that docker exec commands are not used with the user=root option"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.24 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_24] }}"
+    - name: "5.13 | Detect containers with writable root filesystem"
+      set_fact:
+        writable_rootfs: >-
+          {{
+            rootfs_raw.stdout_lines
+            | select('search', 'ReadonlyRootfs=false')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - rootfs_raw is defined
+        - rootfs_raw.rc == 0
 
-# 5.25 Ensure that cgroup usage is confirmed (Manual)
-- name: "Ensure that cgroup usage is confirmed"
-- name: "Do not fill this"
-- name: "5.25 | "
-  setfact:
-    check_5_25:
-      id: "5.25"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that cgroup usage is confirmed"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.25 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_25] }}"
+    - name: "5.13 | Evaluate root filesystem"
+      set_fact:
+        check_5_13:
+          id: "5.13"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the container's root filesystem is mounted as read only"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (writable_rootfs is defined and writable_rootfs | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with writable root filesystem: ' ~ (writable_rootfs | join(' | '))
+              if (writable_rootfs is defined and writable_rootfs | length > 0) else
+              'All containers have a read-only root filesystem.'
+            }}
+          remediation: >-
+            Start containers with --read-only flag:
+            docker run --read-only ...
+            Mount writable paths explicitly as volumes:
+            docker run --read-only -v /tmp:/tmp:rw ...
+          raw_output: "{{ rootfs_raw.stdout | default('No containers') | string }}"
 
-# 5.26 Ensure that the container is restricted from acquiring additional privileges (Manual)
-- name: "Ensure that the container is restricted from acquiring additional privileges"
-- name: "Do not fill this"
-- name: "5.26 | "
-  setfact:
-    check_5_26:
-      id: "5.26"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the container is restricted from acquiring additional privileges"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.26 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_26] }}"
+    - name: "5.13 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_13] }}"
 
-# 5.27 Ensure that container health is checked at runtime (Manual)
-- name: "Ensure that container health is checked at runtime"
-- name: "Do not fill this"
-- name: "5.27 | "
-  setfact:
-    check_5_27:
-      id: "5.27"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that container health is checked at runtime"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.27 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_27] }}"
+    # ──────────────────────────────────────────────
+    # 5.14 – Incoming traffic bound to specific interface
+    # ──────────────────────────────────────────────
+    # HostIp="0.0.0.0" means the port is bound on ALL host interfaces.
+    # Traffic should be bound to a specific IP (e.g. 127.0.0.1 for internal,
+    # or a specific NIC IP for external) to restrict exposure.
+    - name: "5.14 | Inspect port bindings for interface specificity"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Ports={{ '{{' }}json .NetworkSettings.Ports{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: binding_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
 
-# 5.28 Ensure that Docker commands always make use of the latest version of their image (Manual)
-- name: "Ensure that Docker commands always make use of the latest version of their image"
-- name: "Do not fill this"
-- name: "5.28 | "
-  setfact:
-    check_5_28:
-      id: "5.28"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that Docker commands always make use of the latest version of their image"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.28 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_28] }}"
+    - name: "5.14 | Detect containers bound to all interfaces"
+      set_fact:
+        unbound_containers: >-
+          {{
+            binding_raw.stdout_lines
+            | select('search', '"HostIp":"0.0.0.0"')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - binding_raw is defined
+        - binding_raw.rc == 0
 
-# 5.29 Ensure that the PIDs cgroup limit is used (Manual)
-- name: "Ensure that the PIDs cgroup limit is used"
-- name: "Do not fill this"
-- name: "5.29 | "
-  setfact:
-    check_5_29:
-      id: "5.29"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the PIDs cgroup limit is used"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.29 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_29] }}"
+    - name: "5.14 | Evaluate interface binding"
+      set_fact:
+        check_5_14:
+          id: "5.14"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that incoming container traffic is bound to a specific host interface"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (unbound_containers is defined and unbound_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers bound to all interfaces (0.0.0.0): ' ~ (unbound_containers | map('regex_replace', ':Ports=.*', '') | join(', '))
+              if (unbound_containers is defined and unbound_containers | length > 0) else
+              'All container port bindings are tied to a specific host interface.'
+            }}
+          remediation: >-
+            Bind ports to a specific host IP:
+            docker run -p 192.168.1.10:80:80 ...   # specific external NIC
+            docker run -p 127.0.0.1:8080:80 ...    # localhost only
+            Avoid -p 0.0.0.0:<port>:<port> or shorthand -p <port>:<port>.
+          raw_output: "{{ binding_raw.stdout | default('No containers') | string }}"
 
-# 5.30 Ensure that Docker's default bridge "docker0" is not used (Manual)
-- name: "Ensure that Docker's default bridge \"docker0\" is not used"
-- name: "Do not fill this"
-- name: "5.30 | "
-  setfact:
-    check_5_30:
-      id: "5.30"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that Docker's default bridge \"docker0\" is not used"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.30 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_30] }}"
+    - name: "5.14 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_14] }}"
 
-# 5.31 Ensure that the host's user namespaces are not shared (Manual)
-- name: "Ensure that the host's user namespaces are not shared"
-- name: "Do not fill this"
-- name: "5.31 | "
-  setfact:
-    check_5_31:
-      id: "5.31"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the host's user namespaces are not shared"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.31 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_31] }}"
+    # ──────────────────────────────────────────────
+    # 5.15 – on-failure restart policy max 5
+    # ──────────────────────────────────────────────
+    # RestartPolicy.Name should be "on-failure" AND MaximumRetryCount <= 5.
+    # "always" or "unless-stopped" means the container restarts indefinitely
+    # even after repeated crashes — hiding a broken/compromised container.
+    # "no" (or empty) means the container never restarts — also not ideal.
+    - name: "5.15 | Inspect restart policies on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:RestartPolicy={{ '{{' }}.HostConfig.RestartPolicy.Name{{ '}}' }} MaxRetry={{ '{{' }}.HostConfig.RestartPolicy.MaximumRetryCount{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: restart_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
 
-# 5.32 Ensure that the Docker socket is not mounted inside any containers (Manual)
-- name: "Ensure that the Docker socket is not mounted inside any containers"
-- name: "Do not fill this"
-- name: "5.32 | "
-  setfact:
-    check_5_32:
-      id: "5.32"
-      section: "Section 5 - Container Runtime Security"
-      title: "Ensure that the Docker socket is not mounted inside any containers"
-      status: >-
-      details: >-
-      remediation: >-
-      raw_output: >-
-- name: "5.32 | Append result"
-  set_fact:
-    audit_results: "{{ audit_results + [check_5_32] }}"
+    - name: "5.15 | Detect containers not using on-failure with max 5"
+      set_fact:
+        bad_restart_policy: >-
+          {{
+            restart_raw.stdout_lines
+            | reject('search', 'RestartPolicy=on-failure MaxRetry=[1-5]$')
+            | reject('search', 'RestartPolicy=on-failure MaxRetry=[1-5]\s')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - restart_raw is defined
+        - restart_raw.rc == 0
+
+    - name: "5.15 | Evaluate restart policy"
+      set_fact:
+        check_5_15:
+          id: "5.15"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the on-failure container restart policy is set to 5"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (bad_restart_policy is defined and bad_restart_policy | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers without correct restart policy (on-failure, max 5): ' ~ (bad_restart_policy | join(' | '))
+              if (bad_restart_policy is defined and bad_restart_policy | length > 0) else
+              'All containers use on-failure restart policy with MaximumRetryCount <= 5.'
+            }}
+          remediation: >-
+            Set the restart policy when starting containers:
+            docker run --restart=on-failure:5 ...
+            For existing containers: docker update --restart=on-failure:5 <container_id>
+          raw_output: "{{ restart_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.15 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_15] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.16 – Host PID namespace not shared
+    # ──────────────────────────────────────────────
+    # --pid=host lets the container see and signal ALL host processes.
+    # This completely breaks process isolation.
+    - name: "5.16 | Inspect PidMode on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:PidMode={{ '{{' }}.HostConfig.PidMode{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: pidmode_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.16 | Detect containers sharing host PID namespace"
+      set_fact:
+        host_pid_containers: >-
+          {{
+            pidmode_raw.stdout_lines
+            | select('search', 'PidMode=host')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - pidmode_raw is defined
+        - pidmode_raw.rc == 0
+
+    - name: "5.16 | Evaluate PID namespace"
+      set_fact:
+        check_5_16:
+          id: "5.16"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the host's process namespace is not shared"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (host_pid_containers is defined and host_pid_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers sharing host PID namespace: ' ~ (host_pid_containers | join(' | '))
+              if (host_pid_containers is defined and host_pid_containers | length > 0) else
+              'No containers are sharing the host PID namespace.'
+            }}
+          remediation: >-
+            Remove --pid=host from docker run commands.
+            Containers should use their own isolated PID namespace (the default).
+          raw_output: "{{ pidmode_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.16 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_16] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.17 – Host IPC namespace not shared
+    # ──────────────────────────────────────────────
+    # --ipc=host lets the container read/write shared memory segments on the
+    # host — a vector for data leakage between containers and host processes.
+    - name: "5.17 | Inspect IpcMode on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:IpcMode={{ '{{' }}.HostConfig.IpcMode{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: ipcmode_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.17 | Detect containers sharing host IPC namespace"
+      set_fact:
+        host_ipc_containers: >-
+          {{
+            ipcmode_raw.stdout_lines
+            | select('search', 'IpcMode=host')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - ipcmode_raw is defined
+        - ipcmode_raw.rc == 0
+
+    - name: "5.17 | Evaluate IPC namespace"
+      set_fact:
+        check_5_17:
+          id: "5.17"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the host's IPC namespace is not shared"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (host_ipc_containers is defined and host_ipc_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers sharing host IPC namespace: ' ~ (host_ipc_containers | join(' | '))
+              if (host_ipc_containers is defined and host_ipc_containers | length > 0) else
+              'No containers are sharing the host IPC namespace.'
+            }}
+          remediation: >-
+            Remove --ipc=host from docker run commands.
+            If two containers need shared memory, use --ipc=container:<name>
+            to share only between those containers, not with the host.
+          raw_output: "{{ ipcmode_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.17 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_17] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.18 – Host devices not exposed to containers
+    # ──────────────────────────────────────────────
+    # --device mounts host device nodes inside the container.
+    # A non-empty Devices list means the container has direct hardware access.
+    - name: "5.18 | Inspect Devices on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Devices={{ '{{' }}json .HostConfig.Devices{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: devices_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.18 | Detect containers with host devices exposed"
+      set_fact:
+        exposed_devices: >-
+          {{
+            devices_raw.stdout_lines
+            | reject('search', 'Devices=\[\]')
+            | reject('search', 'Devices=null')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - devices_raw is defined
+        - devices_raw.rc == 0
+
+    - name: "5.18 | Evaluate host device exposure"
+      set_fact:
+        check_5_18:
+          id: "5.18"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that host devices are not directly exposed to containers"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'WARN' if (exposed_devices is defined and exposed_devices | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with host devices exposed (review if required): ' ~ (exposed_devices | join(' | '))
+              if (exposed_devices is defined and exposed_devices | length > 0) else
+              'No containers have host devices directly exposed.'
+            }}
+          remediation: >-
+            Remove --device flags unless absolutely required.
+            If a device is needed, restrict permissions to the minimum:
+            docker run --device=/dev/snd:/dev/snd:r  (read-only)
+            Never pass --device=/dev without a specific path.
+          raw_output: "{{ devices_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.18 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_18] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.19 – Default ulimit not relied upon
+    # ──────────────────────────────────────────────
+    # Ulimits=[] means no per-container ulimits are set; the container inherits
+    # daemon defaults. CIS requires either per-container overrides or
+    # explicit daemon defaults — both cases must be manually verified.
+    - name: "5.19 | Inspect Ulimits on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Ulimits={{ '{{' }}json .HostConfig.Ulimits{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: ulimits_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.19 | Detect containers relying on default ulimits"
+      set_fact:
+        default_ulimits: >-
+          {{
+            ulimits_raw.stdout_lines
+            | select('search', 'Ulimits=\[\]')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - ulimits_raw is defined
+        - ulimits_raw.rc == 0
+
+    - name: "5.19 | Evaluate ulimit configuration"
+      set_fact:
+        check_5_19:
+          id: "5.19"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the default ulimit is overwritten at runtime if needed"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'INFO' if (default_ulimits is defined and default_ulimits | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              (default_ulimits | length | string) ~ ' container(s) using daemon default ulimits. Verify daemon defaults are hardened: ' ~ (default_ulimits | map('regex_replace', ':Ulimits=.*', '') | join(', '))
+              if (default_ulimits is defined and default_ulimits | length > 0) else
+              'All containers have explicit ulimit overrides configured.'
+            }}
+          remediation: >-
+            Set per-container ulimits at runtime:
+            docker run --ulimit nofile=1024:1024 --ulimit nproc=100 ...
+            Or configure daemon-wide defaults in /etc/docker/daemon.json:
+            { "default-ulimits": { "nofile": { "Name": "nofile", "Hard": 64000, "Soft": 64000 } } }
+          raw_output: "{{ ulimits_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.19 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_19] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.20 – Mount propagation not set to shared
+    # ──────────────────────────────────────────────
+    # "shared" propagation means mounts inside the container are visible on
+    # the host and vice versa — breaking filesystem isolation.
+    # "slave" or "private" (default) are safe.
+    - name: "5.20 | Inspect mount propagation on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Mounts={{ '{{' }}json .Mounts{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: mountprop_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.20 | Detect shared mount propagation"
+      set_fact:
+        shared_mounts: >-
+          {{
+            mountprop_raw.stdout_lines
+            | select('search', '"Propagation":"shared"')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - mountprop_raw is defined
+        - mountprop_raw.rc == 0
+
+    - name: "5.20 | Evaluate mount propagation"
+      set_fact:
+        check_5_20:
+          id: "5.20"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure mount propagation mode is not set to shared"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (shared_mounts is defined and shared_mounts | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with shared mount propagation: ' ~ (shared_mounts | map('regex_replace', ':Mounts=.*', '') | join(', '))
+              if (shared_mounts is defined and shared_mounts | length > 0) else
+              'No containers are using shared mount propagation.'
+            }}
+          remediation: >-
+            Change mount propagation from shared to private or slave:
+            docker run -v /host/path:/container/path:slave ...
+            Remove :shared from any -v bind mount options.
+          raw_output: "{{ mountprop_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.20 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_20] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.21 – Host UTS namespace not shared
+    # ──────────────────────────────────────────────
+    # --uts=host shares the host's hostname and domain name with the container.
+    # This allows the container to change the host's hostname — a privilege
+    # that has no place in a hardened environment.
+    - name: "5.21 | Inspect UTSMode on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:UTSMode={{ '{{' }}.HostConfig.UTSMode{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: utsmode_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.21 | Detect containers sharing host UTS namespace"
+      set_fact:
+        host_uts_containers: >-
+          {{
+            utsmode_raw.stdout_lines
+            | select('search', 'UTSMode=host')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - utsmode_raw is defined
+        - utsmode_raw.rc == 0
+
+    - name: "5.21 | Evaluate UTS namespace"
+      set_fact:
+        check_5_21:
+          id: "5.21"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the host's UTS namespace is not shared"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (host_uts_containers is defined and host_uts_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers sharing host UTS namespace: ' ~ (host_uts_containers | join(' | '))
+              if (host_uts_containers is defined and host_uts_containers | length > 0) else
+              'No containers are sharing the host UTS namespace.'
+            }}
+          remediation: >-
+            Remove --uts=host from docker run commands.
+            Containers should use their own isolated UTS namespace (the default).
+          raw_output: "{{ utsmode_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.21 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_21] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.22 – Default seccomp profile not disabled
+    # ──────────────────────────────────────────────
+    # seccomp restricts which syscalls a container process can make.
+    # SecurityOpt containing "seccomp=unconfined" disables all restrictions.
+    # An empty SecurityOpt means the default profile is active — that's fine.
+    - name: "5.22 | Inspect SecurityOpt for seccomp on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:SecurityOpt={{ '{{' }}json .HostConfig.SecurityOpt{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: seccomp_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.22 | Detect containers with seccomp disabled"
+      set_fact:
+        seccomp_disabled: >-
+          {{
+            seccomp_raw.stdout_lines
+            | select('search', 'seccomp=unconfined')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - seccomp_raw is defined
+        - seccomp_raw.rc == 0
+
+    - name: "5.22 | Evaluate seccomp profile"
+      set_fact:
+        check_5_22:
+          id: "5.22"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure the default seccomp profile is not disabled"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (seccomp_disabled is defined and seccomp_disabled | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with seccomp disabled (seccomp=unconfined): ' ~ (seccomp_disabled | join(' | '))
+              if (seccomp_disabled is defined and seccomp_disabled | length > 0) else
+              'All containers are using the default seccomp profile.'
+            }}
+          remediation: >-
+            Remove --security-opt seccomp=unconfined from docker run commands.
+            The Docker default seccomp profile blocks ~44 dangerous syscalls automatically.
+            If a custom profile is needed: --security-opt seccomp=/path/to/profile.json
+          raw_output: "{{ seccomp_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.22 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_22] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.23 – docker exec not used with --privileged
+    # ──────────────────────────────────────────────
+    # This cannot be detected at rest via docker inspect — it only exists in
+    # the moment the exec is run. The audit checks daemon audit logs for the
+    # pattern. If auditd is not installed the check returns INFO.
+    - name: "5.23 | Search daemon logs for exec with --privileged"
+      shell: >
+        journalctl -u docker --no-pager --since "7 days ago" 2>/dev/null
+        | grep -i 'exec.*privileged'
+      register: exec_priv_raw
+      changed_when: false
+      failed_when: false
+
+    - name: "5.23 | Evaluate privileged exec usage"
+      set_fact:
+        check_5_23:
+          id: "5.23"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that docker exec commands are not used with the privileged option"
+          status: >-
+            {{
+              'FAIL' if exec_priv_raw.rc == 0 and exec_priv_raw.stdout != '' else
+              'PASS' if exec_priv_raw.rc == 1 else
+              'INFO'
+            }}
+          details: >-
+            {{
+              'docker exec --privileged usage detected in daemon logs (last 7 days): ' ~ exec_priv_raw.stdout[:300]
+              if exec_priv_raw.rc == 0 and exec_priv_raw.stdout != '' else
+              'No docker exec --privileged usage found in daemon logs (last 7 days).'
+              if exec_priv_raw.rc == 1 else
+              'Could not query daemon logs. Manual review of docker exec usage required.'
+            }}
+          remediation: >-
+            Never use: docker exec --privileged <container> <command>
+            Use specific capabilities if elevated access is required in a running container.
+            Audit all docker exec usage via centralized logging.
+          raw_output: "{{ exec_priv_raw.stdout | default('No log output') | string }}"
+
+    - name: "5.23 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_23] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.24 – docker exec not used with --user=root
+    # ──────────────────────────────────────────────
+    # Same pattern as 5.23 — runtime-only, detected via logs.
+    - name: "5.24 | Search daemon logs for exec with --user=root"
+      shell: >
+        journalctl -u docker --no-pager --since "7 days ago" 2>/dev/null
+        | grep -iE 'exec.*(--user=root|user.*root)'
+      register: exec_root_raw
+      changed_when: false
+      failed_when: false
+
+    - name: "5.24 | Evaluate root exec usage"
+      set_fact:
+        check_5_24:
+          id: "5.24"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that docker exec commands are not used with the user=root option"
+          status: >-
+            {{
+              'FAIL' if exec_root_raw.rc == 0 and exec_root_raw.stdout != '' else
+              'PASS' if exec_root_raw.rc == 1 else
+              'INFO'
+            }}
+          details: >-
+            {{
+              'docker exec --user=root usage detected in daemon logs (last 7 days).'
+              if exec_root_raw.rc == 0 and exec_root_raw.stdout != '' else
+              'No docker exec --user=root usage found in daemon logs (last 7 days).'
+              if exec_root_raw.rc == 1 else
+              'Could not query daemon logs. Manual review of docker exec --user usage required.'
+            }}
+          remediation: >-
+            Never use: docker exec --user=root <container> <command>
+            Containers should run as a non-root user defined in the Dockerfile with USER directive.
+            Use docker exec as that non-root user instead.
+          raw_output: "{{ exec_root_raw.stdout | default('No log output') | string }}"
+
+    - name: "5.24 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_24] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.25 – cgroup usage confirmed
+    # ──────────────────────────────────────────────
+    # Docker should use the default "cgroupfs" or systemd cgroup driver.
+    # A custom --cgroup-parent that places containers outside the default
+    # hierarchy can bypass resource limits set by the orchestrator.
+    - name: "5.25 | Inspect CgroupParent on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:CgroupParent={{ '{{' }}.HostConfig.CgroupParent{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: cgroup_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.25 | Detect containers with non-default cgroup parent"
+      set_fact:
+        custom_cgroup: >-
+          {{
+            cgroup_raw.stdout_lines
+            | reject('search', 'CgroupParent=$')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - cgroup_raw is defined
+        - cgroup_raw.rc == 0
+
+    - name: "5.25 | Evaluate cgroup usage"
+      set_fact:
+        check_5_25:
+          id: "5.25"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that cgroup usage is confirmed"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'WARN' if (custom_cgroup is defined and custom_cgroup | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with custom cgroup parent (verify these are intentional): ' ~ (custom_cgroup | join(' | '))
+              if (custom_cgroup is defined and custom_cgroup | length > 0) else
+              'All containers are using the default cgroup hierarchy.'
+            }}
+          remediation: >-
+            Only use --cgroup-parent if required by your orchestrator.
+            Confirm that custom cgroup parents still have resource limits enforced.
+            Remove --cgroup-parent from containers where it was set unintentionally.
+          raw_output: "{{ cgroup_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.25 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_25] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.26 – Container restricted from acquiring additional privileges
+    # ──────────────────────────────────────────────
+    # no-new-privileges prevents the container process from gaining privileges
+    # via setuid/setgid binaries. SecurityOpt should contain "no-new-privileges".
+    - name: "5.26 | Inspect no-new-privileges SecurityOpt on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:SecurityOpt={{ '{{' }}json .HostConfig.SecurityOpt{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: nnp_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.26 | Detect containers missing no-new-privileges"
+      set_fact:
+        missing_nnp: >-
+          {{
+            nnp_raw.stdout_lines
+            | reject('search', 'no-new-privileges')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - nnp_raw is defined
+        - nnp_raw.rc == 0
+
+    - name: "5.26 | Evaluate no-new-privileges"
+      set_fact:
+        check_5_26:
+          id: "5.26"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the container is restricted from acquiring additional privileges"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (missing_nnp is defined and missing_nnp | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers missing no-new-privileges: ' ~ (missing_nnp | map('regex_replace', ':SecurityOpt=.*', '') | join(', '))
+              if (missing_nnp is defined and missing_nnp | length > 0) else
+              'All containers have no-new-privileges set.'
+            }}
+          remediation: >-
+            Add --security-opt=no-new-privileges to all docker run commands.
+            This prevents setuid/setgid programs from escalating privileges inside the container.
+          raw_output: "{{ nnp_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.26 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_26] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.27 – Container health checked at runtime
+    # ──────────────────────────────────────────────
+    # Health.Status == "none" means no HEALTHCHECK is defined — Docker has no
+    # way to know if the containerized service is actually functioning.
+    - name: "5.27 | Inspect health status on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Health={{ '{{' }}.State.Health.Status{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: health_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.27 | Detect containers with no health check"
+      set_fact:
+        no_healthcheck: >-
+          {{
+            health_raw.stdout_lines
+            | select('search', 'Health=$')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - health_raw is defined
+        - health_raw.rc == 0
+
+    - name: "5.27 | Evaluate health check"
+      set_fact:
+        check_5_27:
+          id: "5.27"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that container health is checked at runtime"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (no_healthcheck is defined and no_healthcheck | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with no HEALTHCHECK defined: ' ~ (no_healthcheck | map('regex_replace', ':Health=.*', '') | join(', '))
+              if (no_healthcheck is defined and no_healthcheck | length > 0) else
+              'All containers have a health check configured.'
+            }}
+          remediation: >-
+            Add a HEALTHCHECK instruction to your Dockerfile:
+            HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/ || exit 1
+            Or pass at runtime: docker run --health-cmd="..." --health-interval=30s ...
+          raw_output: "{{ health_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.27 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_27] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.28 – Images use specific tags, not "latest"
+    # ──────────────────────────────────────────────
+    # Using "latest" means you can't guarantee which image version is running
+    # and an upstream compromise of the "latest" tag silently affects you.
+    - name: "5.28 | Inspect image tags on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Image={{ '{{' }}.Config.Image{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: image_tags_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.28 | Detect containers using 'latest' tag or no tag"
+      set_fact:
+        latest_tag_containers: >-
+          {{
+            image_tags_raw.stdout_lines
+            | select('search', ':latest$')
+            | list
+            + image_tags_raw.stdout_lines
+            | reject('search', 'Image=.*:')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - image_tags_raw is defined
+        - image_tags_raw.rc == 0
+
+    - name: "5.28 | Evaluate image versioning"
+      set_fact:
+        check_5_28:
+          id: "5.28"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that Docker commands always make use of the latest version of their image"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (latest_tag_containers is defined and latest_tag_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers using latest tag or untagged image: ' ~ (latest_tag_containers | join(' | '))
+              if (latest_tag_containers is defined and latest_tag_containers | length > 0) else
+              'All containers are using explicitly versioned images.'
+            }}
+          remediation: >-
+            Always pin images to a specific version tag or SHA digest:
+            image: nginx:1.25.3   (version tag)
+            image: nginx@sha256:abc123...  (digest — most secure)
+            Avoid: image: nginx  or  image: nginx:latest
+          raw_output: "{{ image_tags_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.28 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_28] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.29 – PIDs cgroup limit used
+    # ──────────────────────────────────────────────
+    # PidsLimit=0 or -1 means no PID limit — a fork bomb inside the container
+    # can exhaust the host's process table.
+    - name: "5.29 | Inspect PidsLimit on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:PidsLimit={{ '{{' }}.HostConfig.PidsLimit{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: pids_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.29 | Detect containers with no PID limit"
+      set_fact:
+        no_pid_limit: >-
+          {{
+            pids_raw.stdout_lines
+            | select('search', 'PidsLimit=0$')
+            | list
+            + pids_raw.stdout_lines
+            | select('search', 'PidsLimit=-1$')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - pids_raw is defined
+        - pids_raw.rc == 0
+
+    - name: "5.29 | Evaluate PID limit"
+      set_fact:
+        check_5_29:
+          id: "5.29"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the PIDs cgroup limit is used"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (no_pid_limit is defined and no_pid_limit | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers with no PID limit: ' ~ (no_pid_limit | join(' | '))
+              if (no_pid_limit is defined and no_pid_limit | length > 0) else
+              'All containers have a PIDs cgroup limit configured.'
+            }}
+          remediation: >-
+            Set a PID limit when starting containers:
+            docker run --pids-limit=100 ...
+            Choose a value appropriate to the expected workload.
+            Even a high value (e.g. 1000) provides fork bomb protection.
+          raw_output: "{{ pids_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.29 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_29] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.30 – Docker default bridge docker0 not used
+    # ──────────────────────────────────────────────
+    # Containers on the default docker0 bridge can communicate with each other
+    # without any network policy. User-defined networks provide DNS-based
+    # discovery and proper network isolation between containers.
+    - name: "5.30 | Inspect network settings on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Networks={{ '{{' }}json .NetworkSettings.Networks{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: network_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.30 | Detect containers on default docker0 bridge"
+      set_fact:
+        docker0_containers: >-
+          {{
+            network_raw.stdout_lines
+            | select('search', '"bridge":')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - network_raw is defined
+        - network_raw.rc == 0
+
+    - name: "5.30 | Evaluate bridge network usage"
+      set_fact:
+        check_5_30:
+          id: "5.30"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that Docker's default bridge docker0 is not used"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (docker0_containers is defined and docker0_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers on the default docker0 bridge: ' ~ (docker0_containers | map('regex_replace', ':Networks=.*', '') | join(', '))
+              if (docker0_containers is defined and docker0_containers | length > 0) else
+              'No containers are using the default docker0 bridge.'
+            }}
+          remediation: >-
+            Create user-defined bridge networks and connect containers to them:
+            docker network create my-app-network
+            docker run --network=my-app-network ...
+            This provides container DNS resolution and proper network isolation.
+          raw_output: "{{ network_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.30 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_30] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.31 – Host user namespace not shared
+    # ──────────────────────────────────────────────
+    # --userns=host disables user namespace remapping — root inside the
+    # container IS root on the host, with full UID 0 privileges.
+    - name: "5.31 | Inspect UsernsMode on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:UsernsMode={{ '{{' }}.HostConfig.UsernsMode{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: userns_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.31 | Detect containers sharing host user namespace"
+      set_fact:
+        host_userns_containers: >-
+          {{
+            userns_raw.stdout_lines
+            | select('search', 'UsernsMode=host')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - userns_raw is defined
+        - userns_raw.rc == 0
+
+    - name: "5.31 | Evaluate user namespace"
+      set_fact:
+        check_5_31:
+          id: "5.31"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the host's user namespaces are not shared"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (host_userns_containers is defined and host_userns_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'Containers sharing host user namespace (root=root): ' ~ (host_userns_containers | join(' | '))
+              if (host_userns_containers is defined and host_userns_containers | length > 0) else
+              'No containers are sharing the host user namespace.'
+            }}
+          remediation: >-
+            Remove --userns=host from docker run commands.
+            Enable user namespace remapping in daemon.json for full UID isolation:
+            { "userns-remap": "default" }
+          raw_output: "{{ userns_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.31 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_31] }}"
+
+    # ──────────────────────────────────────────────
+    # 5.32 – Docker socket not mounted in containers
+    # ──────────────────────────────────────────────
+    # Mounting /var/run/docker.sock gives the container full control of the
+    # Docker daemon — it can spawn privileged containers, read all secrets,
+    # and completely escape container isolation. This is a critical finding.
+    - name: "5.32 | Inspect mounts for docker.sock on all containers"
+      command: >
+        docker inspect
+        --format '{{ '{{' }}.Id{{ '}}' }}:Mounts={{ '{{' }}json .Mounts{{ '}}' }}'
+        {{ container_ids_raw.stdout_lines | join(' ') }}
+      register: dockersock_raw
+      changed_when: false
+      failed_when: false
+      when: container_ids_raw.stdout != ""
+
+    - name: "5.32 | Detect containers with docker.sock mounted"
+      set_fact:
+        dockersock_containers: >-
+          {{
+            dockersock_raw.stdout_lines
+            | select('search', 'docker.sock')
+            | list
+          }}
+      when:
+        - container_ids_raw.stdout != ""
+        - dockersock_raw is defined
+        - dockersock_raw.rc == 0
+
+    - name: "5.32 | Evaluate docker socket mounting"
+      set_fact:
+        check_5_32:
+          id: "5.32"
+          section: "Section 5 - Container Runtime Security"
+          title: "Ensure that the Docker socket is not mounted inside any containers"
+          status: >-
+            {{
+              'SKIP' if container_ids_raw.stdout == '' else
+              'FAIL' if (dockersock_containers is defined and dockersock_containers | length > 0) else
+              'PASS'
+            }}
+          details: >-
+            {{
+              'No containers found.' if container_ids_raw.stdout == '' else
+              'CRITICAL - Containers with docker.sock mounted (full daemon escape possible): ' ~ (dockersock_containers | map('regex_replace', ':Mounts=.*', '') | join(', '))
+              if (dockersock_containers is defined and dockersock_containers | length > 0) else
+              'No containers have the Docker socket mounted.'
+            }}
+          remediation: >-
+            Remove -v /var/run/docker.sock:/var/run/docker.sock from all docker run commands.
+            If the container needs to manage Docker (e.g. CI agents), use the Docker TCP API
+            with TLS authentication instead, or use purpose-built tools (Kaniko, Buildah)
+            that do not require socket access.
+          raw_output: "{{ dockersock_raw.stdout | default('No containers') | string }}"
+
+    - name: "5.32 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_5_32] }}"
+
+    
 
 
 
