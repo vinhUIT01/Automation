@@ -1,0 +1,23 @@
+- name: Audit Section 6
+  hosts: docker
+  become: true
+  tasks:
+    # - name: 6.1 Ensure that image sprawl is avoided
+
+    - name: 6.1 Ensure that container sprawl is avoided
+      ansible.builtin.shell:
+        cmd: "{% raw %}docker info --format '{{ .Containers }}'{% endraw %}"
+      register: total_container_command
+    - name: Get total running containers 
+      ansible.builtin.shell:
+        cmd: "{% raw %}docker info --format '{{ .ContainersRunning }}'{% endraw %}"
+      register: total_running_container_command
+    - name: Get total containers that are not running
+      ansible.builtin.shell:
+        cmd: "{% raw %}docker info --format '{{ .ContainersStopped }}'{% endraw %}"
+      register: total_not_running_container_command
+    - name: Print audit
+      ansible.builtin.debug:
+        msg: "[INFO] 6.2 - Ensure that container sprawl is avoided: {{ total_container_command.stdout }} containers, {{ total_running_container_command.stdout }} running, {{ total_not_running_container_command.stdout }} stopped"
+      
+        
