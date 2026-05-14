@@ -1,37 +1,249 @@
+---
 - name: Audit Section 6
   hosts: docker
   become: true
+  gather_facts: true
+
+  vars:
+    report_dir:  /tmp/docker_benchmark
+    report_base: "./audit/docker_benchmark_reports"
+    json_file:   "{{ report_dir }}/section6_results.json"
+    audit_results: []
+
   tasks:
-    - name: 6.1 Ensure that image sprawl is avoided
+
+    # ──────────────────────────────────────────────
+    # Pre-flight
+    # ──────────────────────────────────────────────
+    - name: "Pre | Create temp report directory"
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    # ──────────────────────────────────────────────
+    # 6.1 – Ensure that image sprawl is avoided
+    # ──────────────────────────────────────────────
+    # Image sprawl = many images on the host, most of which are no longer
+    # used by any running container. Unused images are wasted disk space
+    # and an expanded attack surface (stale, unpatched layers at rest).
+    # The check compares active images (referenced by running containers)
+    # against the total count. A large gap signals sprawl.
+    - name: "6.1 | Count images actively used by running containers"
       ansible.builtin.shell:
         cmd: |
-          {% raw %} docker ps -qa | xargs -r docker inspect --format "{{.Image}}" | sort -u | wc -l {% endraw %}
+          {% raw %}docker ps -qa | xargs -r docker inspect --format "{{.Image}}" | sort -u | wc -l{% endraw %}
       register: active_images_command
+      changed_when: false
+      failed_when: false
 
-    - name: Get all images
+    - name: "6.1 | Count all images on host"
       ansible.builtin.shell:
         cmd: "docker image list -a -q | wc -l"
       register: all_images_command
+      changed_when: false
+      failed_when: false
 
-    - name: Print all info
+    - name: "6.1 | List all image IDs and tags for raw output"
+      ansible.builtin.shell:
+        cmd: "docker image list --format 'table {% raw %}{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}{% endraw %}'"
+      register: all_images_detail
+      changed_when: false
+      failed_when: false
+
+    - name: "6.1 | Debug"
       ansible.builtin.debug:
-        msg: "[INFO] 6.1 - Ensure that image sprawl is avoided: {{ active_images_command.stdout }} active image of {{ all_images_command.stdout }} total images"
+        msg: >-
+          [INFO] 6.1 - Ensure that image sprawl is avoided:
+          {{ active_images_command.stdout | trim }} active image(s) of
+          {{ all_images_command.stdout | trim }} total images
 
+    - name: "6.1 | Collect result"
+      ansible.builtin.set_fact:
+        # Status logic:
+        #   PASS  – every image on the host is referenced by a running container
+        #   WARN  – there are unused images (most common real-world state)
+        #   INFO  – cannot determine (docker commands failed)
+        check_6_1_active: "{{ active_images_command.stdout | trim | int }}"
+        check_6_1_total:  "{{ all_images_command.stdout  | trim | int }}"
 
-    - name: 6.2 Ensure that container sprawl is avoided
+    - name: "6.1 | Append to audit_results"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '6.1',
+          'section': 'Section 6 - Docker Security Operations',
+          'title':   'Ensure that image sprawl is avoided',
+          'status':  'INFO'  if (active_images_command.rc != 0 or all_images_command.rc != 0)
+                     else ('PASS' if check_6_1_total | int == check_6_1_active | int
+                     else 'WARN'),
+          'details': '[INFO] 6.1 - Could not retrieve image counts.'
+                     if (active_images_command.rc != 0 or all_images_command.rc != 0)
+                     else ('[PASS] 6.1 - No image sprawl detected. '
+                           ~ check_6_1_active ~ ' active image(s), '
+                           ~ check_6_1_total  ~ ' total.')
+                     if check_6_1_total | int == check_6_1_active | int
+                     else ('[WARN] 6.1 - Image sprawl detected: '
+                           ~ check_6_1_active ~ ' active image(s) out of '
+                           ~ check_6_1_total  ~ ' total. '
+                           ~ ((check_6_1_total | int) - (check_6_1_active | int)) | string
+                           ~ ' unused image(s) should be removed.'),
+          'raw_output': all_images_detail.stdout | default('') | string,
+          'remediation': 'Remove unused images regularly:
+            docker image prune -a --filter until=720h
+            Only keep images that are actively referenced by containers.
+            Integrate image pruning into your CI/CD pipeline or run as a scheduled cron job.'
+        }] }}"
+
+    # ──────────────────────────────────────────────
+    # 6.2 – Ensure that container sprawl is avoided
+    # ──────────────────────────────────────────────
+    # Container sprawl = large number of stopped/exited containers accumulating
+    # on the host. Stopped containers still consume disk (their writable layer
+    # is kept). Many stopped containers relative to running ones is a red flag.
+    # CIS guideline: stopped containers should not significantly outnumber
+    # running ones over time.
+    - name: "6.2 | Get total container count"
       ansible.builtin.shell:
         cmd: "{% raw %}docker info --format '{{ .Containers }}'{% endraw %}"
       register: total_container_command
-    - name: Get total running containers 
+      changed_when: false
+      failed_when: false
+
+    - name: "6.2 | Get running container count"
       ansible.builtin.shell:
         cmd: "{% raw %}docker info --format '{{ .ContainersRunning }}'{% endraw %}"
       register: total_running_container_command
-    - name: Get total containers that are not running
+      changed_when: false
+      failed_when: false
+
+    - name: "6.2 | Get stopped container count"
       ansible.builtin.shell:
         cmd: "{% raw %}docker info --format '{{ .ContainersStopped }}'{% endraw %}"
       register: total_not_running_container_command
-    - name: Print audit
+      changed_when: false
+      failed_when: false
+
+    - name: "6.2 | List all containers with status for raw output"
+      ansible.builtin.shell:
+        cmd: "docker ps -a --format 'table {% raw %}{{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}{% endraw %}'"
+      register: all_containers_detail
+      changed_when: false
+      failed_when: false
+
+    - name: "6.2 | Debug"
       ansible.builtin.debug:
-        msg: "[INFO] 6.2 - Ensure that container sprawl is avoided: {{ total_container_command.stdout }} containers, {{ total_running_container_command.stdout }} running, {{ total_not_running_container_command.stdout }} stopped"
-      
-        
+        msg: >-
+          [INFO] 6.2 - Ensure that container sprawl is avoided:
+          {{ total_container_command.stdout | trim }} containers total,
+          {{ total_running_container_command.stdout | trim }} running,
+          {{ total_not_running_container_command.stdout | trim }} stopped
+
+    - name: "6.2 | Set counts as facts"
+      ansible.builtin.set_fact:
+        check_6_2_total:   "{{ total_container_command.stdout         | trim | int }}"
+        check_6_2_running: "{{ total_running_container_command.stdout | trim | int }}"
+        check_6_2_stopped: "{{ total_not_running_container_command.stdout | trim | int }}"
+
+    - name: "6.2 | Append to audit_results"
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{
+          'id':      '6.2',
+          'section': 'Section 6 - Docker Security Operations',
+          'title':   'Ensure that container sprawl is avoided',
+          'status':  'INFO'  if (total_container_command.rc != 0)
+                     else ('PASS' if check_6_2_stopped | int == 0
+                     else ('WARN' if check_6_2_stopped | int <= check_6_2_running | int
+                     else 'FAIL')),
+          'details': '[INFO] 6.2 - Could not retrieve container counts.'
+                     if total_container_command.rc != 0
+                     else ('[PASS] 6.2 - No stopped containers. '
+                           ~ check_6_2_running ~ ' running, 0 stopped.')
+                     if check_6_2_stopped | int == 0
+                     else ('[WARN] 6.2 - '
+                           ~ check_6_2_stopped ~ ' stopped container(s) alongside '
+                           ~ check_6_2_running ~ ' running. Prune if no longer needed.')
+                     if check_6_2_stopped | int <= check_6_2_running | int
+                     else ('[FAIL] 6.2 - Significant container sprawl: '
+                           ~ check_6_2_stopped ~ ' stopped vs '
+                           ~ check_6_2_running ~ ' running containers. '
+                           ~ check_6_2_total   ~ ' containers total.'),
+          'raw_output': all_containers_detail.stdout | default('') | string,
+          'remediation': 'Remove stopped containers that are no longer needed:
+            docker container prune
+            Prevent accumulation by always using --rm flag for one-off containers:
+            docker run --rm <image> <command>
+            Set up a scheduled prune job or integrate into your CI/CD cleanup stage.'
+        }] }}"
+
+    # ════════════════════════════════════════════════════════════════
+    # REPORTING – JSON only
+    # ════════════════════════════════════════════════════════════════
+
+    - name: "Report | Compute summary counts"
+      ansible.builtin.set_fact:
+        summary_pass:  "{{ audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+        summary_fail:  "{{ audit_results | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+        summary_warn:  "{{ audit_results | selectattr('status', 'equalto', 'WARN') | list | length }}"
+        summary_info:  "{{ audit_results | selectattr('status', 'equalto', 'INFO') | list | length }}"
+        summary_total: "{{ audit_results | length }}"
+
+    # ── Step 1: Write JSON to target ─────────────────────────────────────
+    - name: "Report | Write JSON results file to target"
+      ansible.builtin.copy:
+        dest: "{{ json_file }}"
+        mode: '0644'
+        content: "{{ {
+          'meta': {
+            'section':   'Section 6 - Docker Security Operations',
+            'host':      ansible_hostname,
+            'os':        ansible_distribution ~ ' ' ~ ansible_distribution_version,
+            'generated': ansible_date_time.iso8601,
+            'pass':  summary_pass  | int,
+            'fail':  summary_fail  | int,
+            'warn':  summary_warn  | int,
+            'info':  summary_info  | int,
+            'total': summary_total | int
+          },
+          'results': audit_results
+        } | to_nice_json }}"
+
+    # ── Step 2: Fetch JSON back to controller ─────────────────────────────
+    - name: "Report | Ensure local report folder exists on controller"
+      ansible.builtin.file:
+        path: "{{ report_base }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+
+    - name: "Report | Fetch JSON to controller"
+      ansible.builtin.fetch:
+        src:  "{{ json_file }}"
+        dest: "{{ report_base }}/{{ inventory_hostname }}_section6.json"
+        flat: true
+
+    # ── Step 3: Cleanup temp file from target ────────────────────────────
+    - name: "Report | Remove JSON temp file from target"
+      ansible.builtin.file:
+        path: "{{ json_file }}"
+        state: absent
+
+    # ── Console summary ───────────────────────────────────────────────────
+    - name: "Report | Console summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌──────────────────────────────────────────────────────────────┐
+          │   CIS Docker Benchmark – Section 6 Summary                   │
+          ├───────────────┬──────────────────────────────────────────────┤
+          │ Host          │ {{ ansible_hostname }}
+          │ Total checks  │ {{ summary_total }}
+          │ PASS          │ {{ summary_pass }}
+          │ FAIL          │ {{ summary_fail }}
+          │ WARN          │ {{ summary_warn }}
+          │ INFO          │ {{ summary_info }}
+          ├───────────────┴──────────────────────────────────────────────┤
+          │ JSON → {{ report_base }}/{{ inventory_hostname }}_section6.json
+          └──────────────────────────────────────────────────────────────┘
+          {% for r in audit_results %}
+          [{{ r.status }}] {{ r.id }} – {{ r.details | truncate(80) }}
+          {% endfor %}
