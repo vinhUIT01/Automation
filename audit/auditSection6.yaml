@@ -2,9 +2,23 @@
   hosts: docker
   become: true
   tasks:
-    # - name: 6.1 Ensure that image sprawl is avoided
+    - name: 6.1 Ensure that image sprawl is avoided
+      ansible.builtin.shell:
+        cmd: |
+          {% raw %} docker ps -qa | xargs -r docker inspect --format "{{.Image}}" | sort -u | wc -l {% endraw %}
+      register: active_images_command
 
-    - name: 6.1 Ensure that container sprawl is avoided
+    - name: Get all images
+      ansible.builtin.shell:
+        cmd: "docker image list -a -q | wc -l"
+      register: all_images_command
+
+    - name: Print all info
+      ansible.builtin.debug:
+        msg: "[INFO] 6.1 - Ensure that image sprawl is avoided: {{ active_images_command.stdout }} active image of {{ all_images_command.stdout }} total images"
+
+
+    - name: 6.2 Ensure that container sprawl is avoided
       ansible.builtin.shell:
         cmd: "{% raw %}docker info --format '{{ .Containers }}'{% endraw %}"
       register: total_container_command
