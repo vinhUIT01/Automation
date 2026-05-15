@@ -1,9 +1,32 @@
-- name: CIS Docker Benchmark - Audit Section 2 & 3
+- name: "CIS Docker Benchmark - Audit Section 2 & 3 (Excel Report)"
   hosts: docker
   become: true
+  gather_facts: true
+  vars:
+    report_dir: /tmp/docker_benchmark
+    report_file: "{{ report_dir }}/docker_benchmark_section2_3.xlsx"
+    data_file: "{{ report_dir }}/audit_data_section2_3.json"
+    python_script: "{{ report_dir }}/generate_report_2_3.py"
+    audit_results: []
+
   tasks:
+    # ──────────────────────────────────────────────
+    # Pre-flight
+    # ──────────────────────────────────────────────
+    - name: Create report directory
+      file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Ensure openpyxl is installed on target
+      pip:
+        name: openpyxl
+        state: present
+      failed_when: false
+
     # ---------------------------------------------------------------
-    # SECTION 2: Docker Daemon Configuration (Updated from image)
+    # SECTION 2: Docker Daemon Configuration
     # ---------------------------------------------------------------
     - name: 2.1 Ensure TLS Authentication is enabled
       ansible.builtin.shell: |
@@ -12,13 +35,26 @@
       register: tls_audit
       failed_when: false
 
-    - name: Assert 2.1 TLS is enabled
-      ansible.builtin.assert:
-        that:
-          - tls_audit.rc == 0
-        success_msg: "[PASS] 2.1 - TLS Authentication is enabled"
-        fail_msg: "[FAIL] 2.1 - TLS Authentication is NOT correctly enabled in daemon.json"
-      failed_when: false
+    - name: 2.1 Evaluate TLS Authentication
+      set_fact:
+        check_2_1:
+          id: "2.1"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure TLS Authentication is enabled"
+          status: >-
+            {{ 'PASS' if tls_audit.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'TLS Authentication is enabled with TLS and TLSVerify configured.'
+               if tls_audit.rc == 0 else
+               'TLS Authentication is NOT correctly enabled in daemon.json' }}
+          remediation: >-
+            Configure TLS in /etc/docker/daemon.json with "tls": true and "tlsverify": true.
+            Ensure CA, server cert, and server key paths are correctly specified.
+          raw_output: "{{ tls_audit.stdout | default('N/A') | string }}"
+
+    - name: 2.1 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_1] }}"
 
     - name: 2.2 Ensure logging is configured correctly
       ansible.builtin.shell: |
@@ -28,13 +64,26 @@
       register: logging_audit
       failed_when: false
 
-    - name: Assert 2.2 Logging is configured
-      ansible.builtin.assert:
-        that:
-          - logging_audit.rc == 0
-        success_msg: "[PASS] 2.2 - Logging is configured correctly"
-        fail_msg: "[FAIL] 2.2 - Logging is NOT configured correctly (Expected: json-file, 10m, 3)"
-      failed_when: false
+    - name: 2.2 Evaluate Logging Configuration
+      set_fact:
+        check_2_2:
+          id: "2.2"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure logging is configured correctly"
+          status: >-
+            {{ 'PASS' if logging_audit.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Logging is configured correctly with json-file driver, 10m max-size, 3 max-file.'
+               if logging_audit.rc == 0 else
+               'Logging is NOT configured correctly (Expected: json-file, 10m, 3)' }}
+          remediation: >-
+            Configure logging in /etc/docker/daemon.json:
+            {"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}
+          raw_output: "{{ logging_audit.stdout | default('N/A') | string }}"
+
+    - name: 2.2 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_2] }}"
 
     - name: 2.3 Ensure User Namespace Remapping is enabled
       ansible.builtin.shell: |
@@ -43,13 +92,26 @@
       register: userns_audit
       failed_when: false
 
-    - name: Assert 2.3 User Namespace Remapping is enabled
-      ansible.builtin.assert:
-        that:
-          - userns_audit.rc == 0
-        success_msg: "[PASS] 2.3 - User Namespace Remapping is enabled"
-        fail_msg: "[FAIL] 2.3 - User Namespace Remapping is NOT enabled or subuid/subgid missing"
-      failed_when: false
+    - name: 2.3 Evaluate User Namespace Remapping
+      set_fact:
+        check_2_3:
+          id: "2.3"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure User Namespace Remapping is enabled"
+          status: >-
+            {{ 'PASS' if userns_audit.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'User Namespace Remapping is enabled with default profile and subuid/subgid files present.'
+               if userns_audit.rc == 0 else
+               'User Namespace Remapping is NOT enabled or subuid/subgid files missing' }}
+          remediation: >-
+            Add "userns-remap": "default" to /etc/docker/daemon.json and restart Docker.
+            Ensure /etc/subuid and /etc/subgid files exist.
+          raw_output: "{{ userns_audit.stdout | default('N/A') | string }}"
+
+    - name: 2.3 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_3] }}"
 
     - name: 2.4 Ensure Legacy Registry is disabled
       ansible.builtin.shell: |
@@ -57,13 +119,25 @@
       register: legacy_reg_audit
       failed_when: false
 
-    - name: Assert 2.4 Legacy Registry is disabled
-      ansible.builtin.assert:
-        that:
-          - legacy_reg_audit.rc == 0
-        success_msg: "[PASS] 2.4 - Legacy Registry is disabled"
-        fail_msg: "[FAIL] 2.4 - Legacy Registry is NOT disabled"
-      failed_when: false
+    - name: 2.4 Evaluate Legacy Registry
+      set_fact:
+        check_2_4:
+          id: "2.4"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure Legacy Registry is disabled"
+          status: >-
+            {{ 'PASS' if legacy_reg_audit.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Legacy Registry is disabled.'
+               if legacy_reg_audit.rc == 0 else
+               'Legacy Registry is NOT disabled' }}
+          remediation: >-
+            Add "disable-legacy-registry": true to /etc/docker/daemon.json
+          raw_output: "{{ legacy_reg_audit.stdout | default('N/A') | string }}"
+
+    - name: 2.4 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_4] }}"
 
     - name: 2.5 Ensure Live Restore is enabled
       ansible.builtin.shell: |
@@ -71,80 +145,498 @@
       register: live_restore_audit
       failed_when: false
 
-    - name: Assert 2.5 Live Restore is enabled
-      ansible.builtin.assert:
-        that:
-          - live_restore_audit.rc == 0
-        success_msg: "[PASS] 2.5 - Live Restore is enabled"
-        fail_msg: "[FAIL] 2.5 - Live Restore is NOT enabled"
-      failed_when: false
+    - name: 2.5 Evaluate Live Restore
+      set_fact:
+        check_2_5:
+          id: "2.5"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure Live Restore is enabled"
+          status: >-
+            {{ 'PASS' if live_restore_audit.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Live Restore is enabled - containers continue running if Docker daemon stops.'
+               if live_restore_audit.rc == 0 else
+               'Live Restore is NOT enabled' }}
+          remediation: >-
+            Add "live-restore": true to /etc/docker/daemon.json and restart Docker.
+          raw_output: "{{ live_restore_audit.stdout | default('N/A') | string }}"
 
+    - name: 2.5 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_5] }}"
 
     # ---------------------------------------------------------------
-    # SECTION 3: Docker Daemon Configuration Files (Updated from image)
+    # SECTION 3: Docker Daemon Configuration Files
     # ---------------------------------------------------------------
     - name: 3.1.1 Audit /var/run/docker.sock ownership and permissions
       ansible.builtin.stat:
         path: /var/run/docker.sock
       register: docker_sock_audit
 
-    - name: Assert 3.1.1 /var/run/docker.sock root:docker 660
-      ansible.builtin.assert:
-        that:
-          - docker_sock_audit.stat.pw_name == 'root'
-          - docker_sock_audit.stat.gr_name == 'docker'
-          - docker_sock_audit.stat.mode == '0660'
-        success_msg: "[PASS] 3.1.1 - /var/run/docker.sock ownership and permissions are correct"
-        fail_msg: "[FAIL] 3.1.1 - /var/run/docker.sock check failed"
-      when: docker_sock_audit.stat.exists
-      failed_when: false
+    - name: 3.1.1 Evaluate Docker Socket
+      set_fact:
+        check_3_1_1:
+          id: "3.1.1"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure /var/run/docker.sock ownership and permissions are correct"
+          status: >-
+            {{ 'SKIP' if not docker_sock_audit.stat.exists else
+               'PASS' if (docker_sock_audit.stat.pw_name == 'root' and
+                         docker_sock_audit.stat.gr_name == 'docker' and
+                         docker_sock_audit.stat.mode == '0660') else
+               'FAIL' }}
+          details: >-
+            {{ 'Docker socket does not exist.' if not docker_sock_audit.stat.exists else
+               'Docker socket ownership and permissions are correct (root:docker 0660).'
+               if (docker_sock_audit.stat.pw_name == 'root' and
+                   docker_sock_audit.stat.gr_name == 'docker' and
+                   docker_sock_audit.stat.mode == '0660') else
+               'Docker socket check failed. Current: ' ~ docker_sock_audit.stat.pw_name ~ ':' ~
+               docker_sock_audit.stat.gr_name ~ ' ' ~ docker_sock_audit.stat.mode }}
+          remediation: >-
+            chown root:docker /var/run/docker.sock && chmod 660 /var/run/docker.sock
+          raw_output: >-
+            {{ 'Socket does not exist' if not docker_sock_audit.stat.exists else
+               docker_sock_audit.stat.pw_name ~ ':' ~ docker_sock_audit.stat.gr_name ~
+               ' mode=' ~ docker_sock_audit.stat.mode }}
+
+    - name: 3.1.1 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_1_1] }}"
 
     - name: 3.1.2 Audit /etc/docker/daemon.json ownership and permissions
       ansible.builtin.stat:
         path: /etc/docker/daemon.json
       register: daemon_json_audit
 
-    - name: Assert 3.1.2 /etc/docker/daemon.json root:root 644
-      ansible.builtin.assert:
-        that:
-          - daemon_json_audit.stat.pw_name == 'root'
-          - daemon_json_audit.stat.gr_name == 'root'
-          - daemon_json_audit.stat.mode == '0644'
-        success_msg: "[PASS] 3.1.2 - /etc/docker/daemon.json ownership and permissions are correct"
-        fail_msg: "[FAIL] 3.1.2 - /etc/docker/daemon.json check failed"
-      when: daemon_json_audit.stat.exists
-      failed_when: false
+    - name: 3.1.2 Evaluate Daemon JSON
+      set_fact:
+        check_3_1_2:
+          id: "3.1.2"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure /etc/docker/daemon.json ownership and permissions are correct"
+          status: >-
+            {{ 'SKIP' if not daemon_json_audit.stat.exists else
+               'PASS' if (daemon_json_audit.stat.pw_name == 'root' and
+                         daemon_json_audit.stat.gr_name == 'root' and
+                         daemon_json_audit.stat.mode == '0644') else
+               'FAIL' }}
+          details: >-
+            {{ 'daemon.json does not exist.' if not daemon_json_audit.stat.exists else
+               'daemon.json ownership and permissions are correct (root:root 0644).'
+               if (daemon_json_audit.stat.pw_name == 'root' and
+                   daemon_json_audit.stat.gr_name == 'root' and
+                   daemon_json_audit.stat.mode == '0644') else
+               'daemon.json check failed. Current: ' ~ daemon_json_audit.stat.pw_name ~ ':' ~
+               daemon_json_audit.stat.gr_name ~ ' ' ~ daemon_json_audit.stat.mode }}
+          remediation: >-
+            chown root:root /etc/docker/daemon.json && chmod 644 /etc/docker/daemon.json
+          raw_output: >-
+            {{ 'File does not exist' if not daemon_json_audit.stat.exists else
+               daemon_json_audit.stat.pw_name ~ ':' ~ daemon_json_audit.stat.gr_name ~
+               ' mode=' ~ daemon_json_audit.stat.mode }}
+
+    - name: 3.1.2 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_1_2] }}"
 
     - name: 3.1.3 Audit docker.service file ownership and permissions
       ansible.builtin.stat:
         path: /usr/lib/systemd/system/docker.service
       register: docker_svc_audit
 
-    - name: Assert 3.1.3 docker.service root:root 644
-      ansible.builtin.assert:
-        that:
-          - docker_svc_audit.stat.pw_name == 'root'
-          - docker_svc_audit.stat.gr_name == 'root'
-          - docker_svc_audit.stat.mode == '0644'
-        success_msg: "[PASS] 3.1.3 - docker.service ownership and permissions are correct"
-        fail_msg: "[FAIL] 3.1.3 - docker.service check failed"
-      when: docker_svc_audit.stat.exists
-      failed_when: false
+    - name: 3.1.3 Evaluate Docker Service
+      set_fact:
+        check_3_1_3:
+          id: "3.1.3"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure docker.service ownership and permissions are correct"
+          status: >-
+            {{ 'SKIP' if not docker_svc_audit.stat.exists else
+               'PASS' if (docker_svc_audit.stat.pw_name == 'root' and
+                         docker_svc_audit.stat.gr_name == 'root' and
+                         docker_svc_audit.stat.mode == '0644') else
+               'FAIL' }}
+          details: >-
+            {{ 'docker.service does not exist.' if not docker_svc_audit.stat.exists else
+               'docker.service ownership and permissions are correct (root:root 0644).'
+               if (docker_svc_audit.stat.pw_name == 'root' and
+                   docker_svc_audit.stat.gr_name == 'root' and
+                   docker_svc_audit.stat.mode == '0644') else
+               'docker.service check failed. Current: ' ~ docker_svc_audit.stat.pw_name ~ ':' ~
+               docker_svc_audit.stat.gr_name ~ ' ' ~ docker_svc_audit.stat.mode }}
+          remediation: >-
+            chown root:root /usr/lib/systemd/system/docker.service && chmod 644
+          raw_output: >-
+            {{ 'File does not exist' if not docker_svc_audit.stat.exists else
+               docker_svc_audit.stat.pw_name ~ ':' ~ docker_svc_audit.stat.gr_name ~
+               ' mode=' ~ docker_svc_audit.stat.mode }}
+
+    - name: 3.1.3 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_1_3] }}"
 
     - name: 3.1.4 Audit /var/lib/docker ownership and permissions
       ansible.builtin.stat:
         path: /var/lib/docker
       register: docker_data_dir_audit
 
-    - name: Assert 3.1.4 /var/lib/docker root:root 0710
-      ansible.builtin.assert:
-        that:
-          - docker_data_dir_audit.stat.pw_name == 'root'
-          - docker_data_dir_audit.stat.gr_name == 'root'
-          - docker_data_dir_audit.stat.mode == '0710'
-        success_msg: "[PASS] 3.1.4 - /var/lib/docker ownership and permissions are correct"
-        fail_msg: "[FAIL] 3.1.4 - /var/lib/docker check failed (Expected 0710, Current: {{ docker_data_dir_audit.stat.mode }})"
-      when: docker_data_dir_audit.stat.exists
-      failed_when: false
+    - name: 3.1.4 Evaluate Docker Data Directory
+      set_fact:
+        check_3_1_4:
+          id: "3.1.4"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure /var/lib/docker ownership and permissions are correct"
+          status: >-
+            {{ 'SKIP' if not docker_data_dir_audit.stat.exists else
+               'PASS' if (docker_data_dir_audit.stat.pw_name == 'root' and
+                         docker_data_dir_audit.stat.gr_name == 'root' and
+                         docker_data_dir_audit.stat.mode == '0710') else
+               'FAIL' }}
+          details: >-
+            {{ '/var/lib/docker does not exist.' if not docker_data_dir_audit.stat.exists else
+               '/var/lib/docker ownership and permissions are correct (root:root 0710).'
+               if (docker_data_dir_audit.stat.pw_name == 'root' and
+                   docker_data_dir_audit.stat.gr_name == 'root' and
+                   docker_data_dir_audit.stat.mode == '0710') else
+               '/var/lib/docker check failed. Expected 0710, Current: ' ~
+               docker_data_dir_audit.stat.mode }}
+          remediation: >-
+            chown root:root /var/lib/docker && chmod 0710 /var/lib/docker
+          raw_output: >-
+            {{ 'Directory does not exist' if not docker_data_dir_audit.stat.exists else
+               docker_data_dir_audit.stat.pw_name ~ ':' ~ docker_data_dir_audit.stat.gr_name ~
+               ' mode=' ~ docker_data_dir_audit.stat.mode }}
+
+    - name: 3.1.4 Append result
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_1_4] }}"
+
+    # ──────────────────────────────────────────────
+    # Summary counts
+    # ──────────────────────────────────────────────
+    - name: Compute summary statistics
+      set_fact:
+        summary_pass:  "{{ audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+        summary_fail:  "{{ audit_results | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+        summary_skip:  "{{ audit_results | selectattr('status', 'equalto', 'SKIP') | list | length }}"
+        summary_info:  "{{ audit_results | selectattr('status', 'equalto', 'INFO') | list | length }}"
+        summary_total: "{{ audit_results | length }}"
+
+    # ──────────────────────────────────────────────
+    # Write audit data to JSON file on target
+    # ──────────────────────────────────────────────
+    - name: Write audit data to JSON file on target
+      copy:
+        dest: "{{ data_file }}"
+        mode: '0600'
+        content: "{{ {'meta': {'host': ansible_hostname,
+                               'docker_ver': ansible_distribution ~ ' ' ~ ansible_distribution_version,
+                               'os': ansible_distribution ~ ' ' ~ ansible_distribution_version,
+                               'generated': ansible_date_time.iso8601,
+                               'pass': summary_pass | int,
+                               'fail': summary_fail | int,
+                               'skip': summary_skip | int,
+                               'info': summary_info | int,
+                               'total': summary_total | int},
+                      'results': audit_results} | to_nice_json }}"
+
+    # ──────────────────────────────────────────────
+    # Write the Python script for Excel generation
+    # ──────────────────────────────────────────────
+    - name: Write Excel report generator script
+      copy:
+        dest: "{{ python_script }}"
+        mode: '0700'
+        content: |
+          #!/usr/bin/env python3
+          import json
+          from openpyxl import Workbook
+          from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+          from openpyxl.chart import BarChart, Reference
+
+          DATA_FILE = "{{ data_file }}"
+          OUTPUT    = "{{ report_file }}"
+
+          with open(DATA_FILE) as fh:
+              payload = json.load(fh)
+
+          META          = payload["meta"]
+          AUDIT_RESULTS = payload["results"]
+
+          # ── Palette ──────────────────────────────────────────────────────
+          P = dict(
+              TITLE_BG="0F3460", HEADER_BG="1F2D3D", HEADER_FG="FFFFFF",
+              PASS_BG="D6F4DC",  PASS_FG="1A6E2E",
+              FAIL_BG="FAD7D5",  FAIL_FG="9C2B26",
+              SKIP_BG="E8E8E8",  SKIP_FG="555555",
+              INFO_BG="D0E8FF",  INFO_FG="1A4E8A",
+              ROW_ALT="F6F8FA",  BORDER="BFC9D4",
+          )
+          STATUS_MAP = {
+              "PASS": (P["PASS_BG"], P["PASS_FG"], "PASS"),
+              "FAIL": (P["FAIL_BG"], P["FAIL_FG"], "FAIL"),
+              "SKIP": (P["SKIP_BG"], P["SKIP_FG"], "SKIP"),
+              "INFO": (P["INFO_BG"], P["INFO_FG"], "INFO"),
+          }
+
+          def fill(c):
+              return PatternFill("solid", fgColor=c)
+
+          def bdr(c=None):
+              s = Side(style="thin", color=c or P["BORDER"])
+              return Border(left=s, right=s, top=s, bottom=s)
+
+          def font(bold=False, size=10, color="000000", italic=False):
+              return Font(name="Arial", bold=bold, size=size, color=color, italic=italic)
+
+          def align(h="left", v="top", wrap=True):
+              return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+
+          def safe(v):
+              """Convert any non-Excel-primitive to a string."""
+              return v if isinstance(v, (str, int, float, bool, type(None))) else json.dumps(v)
+
+          wb = Workbook()
+
+          # ════════════════════════════════════════════════════════════════
+          # Sheet 1 – SUMMARY
+          # ════════════════════════════════════════════════════════════════
+          ws = wb.active
+          ws.title = "Summary"
+          ws.sheet_view.showGridLines = False
+          ws.column_dimensions["A"].width = 2
+
+          # Title
+          ws.merge_cells("B1:J2")
+          c = ws["B1"]
+          c.value     = "Docker CIS Benchmark Audit  -  Sections 2 & 3"
+          c.font      = font(bold=True, size=20, color=P["HEADER_FG"])
+          c.fill      = fill(P["TITLE_BG"])
+          c.alignment = align("left", "center", wrap=False)
+          ws.row_dimensions[1].height = 20
+          ws.row_dimensions[2].height = 22
+
+          # Subtitle
+          ws.merge_cells("B3:J3")
+          c = ws["B3"]
+          c.value = (f"Daemon Configuration & Files  |  Host: {META['host']}"
+                     f"  |  OS: {META['os']}"
+                     f"  |  {META['generated']}")
+          c.font      = font(size=9, color="AAAAAA", italic=True)
+          c.fill      = fill(P["TITLE_BG"])
+          c.alignment = align("left", "center", wrap=False)
+          ws.row_dimensions[3].height = 16
+          ws.row_dimensions[4].height = 12
+
+          # Stat cards
+          cards = [
+              ("B","C", "TOTAL CHECKS", META["total"], P["HEADER_BG"], P["HEADER_FG"]),
+              ("D","E", "PASSED",       META["pass"],  P["PASS_BG"],   P["PASS_FG"]),
+              ("F","G", "FAILED",       META["fail"],  P["FAIL_BG"],   P["FAIL_FG"]),
+              ("H","I", "INFO / SKIP",  META["info"]+META["skip"], P["INFO_BG"], P["INFO_FG"]),
+          ]
+          for c1, c2, label, val, _bg, fg in cards:
+              ws.merge_cells(f"{c1}5:{c2}5")
+              lc = ws[f"{c1}5"]
+              lc.value = label
+              lc.font  = font(bold=True, size=9, color="555555")
+              lc.fill  = fill("EAECEF")
+              lc.alignment = align("center", "center", wrap=False)
+              lc.border = bdr()
+              ws.merge_cells(f"{c1}6:{c2}6")
+              vc = ws[f"{c1}6"]
+              vc.value = val
+              vc.font  = font(bold=True, size=30, color=fg)
+              vc.fill  = fill("FFFFFF")
+              vc.alignment = align("center", "center", wrap=False)
+              vc.border = bdr()
+          ws.row_dimensions[5].height = 20
+          ws.row_dimensions[6].height = 46
+          ws.row_dimensions[7].height = 12
+
+          # Compliance bar
+          total = META["total"] or 1
+          pct   = round(META["pass"] / total * 100, 1)
+          bar   = chr(9608) * int(pct/5) + chr(9617) * (20 - int(pct/5))
+          ws.merge_cells("B8:J8")
+          bc = ws["B8"]
+          bc.value = f"  Compliance:  {bar}  {pct}%  ({META['pass']} / {META['total']} passed)"
+          bc.font  = font(bold=True, size=11,
+                          color=P["PASS_FG"] if pct >= 80 else P["FAIL_FG"])
+          bc.fill  = fill("EAF4EA" if pct >= 80 else "FAE8E8")
+          bc.alignment = align("left", "center", wrap=False)
+          bc.border = bdr()
+          ws.row_dimensions[8].height = 28
+          ws.row_dimensions[9].height = 12
+
+          # Quick results table
+          spans = {"B":("B","C"), "D":("D","E"), "F":("F","F"), "G":("G","J")}
+          HDR   = 10
+          for col, hdr in zip(["B","D","F","G"],
+                               ["Check ID","Title","Status","Details"]):
+              c1, c2 = spans[col]
+              ws.merge_cells(f"{c1}{HDR}:{c2}{HDR}")
+              cell = ws[f"{col}{HDR}"]
+              cell.value     = hdr
+              cell.font      = font(bold=True, size=10, color=P["HEADER_FG"])
+              cell.fill      = fill(P["HEADER_BG"])
+              cell.alignment = align("center", "center", wrap=False)
+              cell.border    = bdr()
+          ws.row_dimensions[HDR].height = 22
+
+          for i, result in enumerate(AUDIT_RESULTS):
+              r  = HDR + 1 + i
+              bg = "FFFFFF" if i % 2 == 0 else P["ROW_ALT"]
+              sbg, sfg, slabel = STATUS_MAP.get(
+                  result["status"], (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
+              row = {"B": result["id"], "D": result["title"],
+                     "F": slabel,       "G": result["details"]}
+              for col, val in row.items():
+                  c1, c2 = spans[col]
+                  ws.merge_cells(f"{c1}{r}:{c2}{r}")
+                  cell = ws[f"{col}{r}"]
+                  cell.value     = safe(val)
+                  cell.border    = bdr()
+                  cell.alignment = align("center" if col in ("B","F") else "left", "center")
+                  if col == "F":
+                      cell.font = font(bold=True, color=sfg)
+                      cell.fill = fill(sbg)
+                  else:
+                      cell.font = font()
+                      cell.fill = fill(bg)
+              ws.row_dimensions[r].height = 26
+
+          for col, w in {"B":9,"C":5,"D":28,"E":5,"F":13,"G":28,"H":14,"I":1,"J":1}.items():
+              ws.column_dimensions[col].width = w
+
+          # ════════════════════════════════════════════════════════════════
+          # Sheet 2 – DETAILED RESULTS
+          # ════════════════════════════════════════════════════════════════
+          ws2 = wb.create_sheet("Detailed Results")
+          ws2.sheet_view.showGridLines = False
+          ws2.column_dimensions["A"].width = 2
+
+          det_cols = [
+              ("B","Check ID",10),("C","Section",28),("D","Title",36),
+              ("E","Status",13),("F","Details",42),("G","Remediation",42),
+              ("H","Raw Output",38),
+          ]
+          for col, label, width in det_cols:
+              c = ws2[f"{col}1"]
+              c.value     = label
+              c.font      = font(bold=True, size=10, color=P["HEADER_FG"])
+              c.fill      = fill(P["HEADER_BG"])
+              c.alignment = align("center", "center", wrap=False)
+              c.border    = bdr()
+              ws2.column_dimensions[col].width = width
+          ws2.row_dimensions[1].height = 22
+
+          for i, result in enumerate(AUDIT_RESULTS):
+              r  = i + 2
+              bg = "FFFFFF" if i % 2 == 0 else P["ROW_ALT"]
+              sbg, sfg, slabel = STATUS_MAP.get(
+                  result["status"], (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
+              det = {
+                  "B": result["id"],          "C": result["section"],
+                  "D": result["title"],       "E": slabel,
+                  "F": result["details"],     "G": result["remediation"],
+                  "H": result["raw_output"],
+              }
+              for col, val in det.items():
+                  cell = ws2[f"{col}{r}"]
+                  cell.value     = safe(val)
+                  cell.border    = bdr()
+                  cell.alignment = align("center" if col in ("B","E") else "left", "top")
+                  if col == "E":
+                      cell.font = font(bold=True, color=sfg)
+                      cell.fill = fill(sbg)
+                  else:
+                      cell.font = font()
+                      cell.fill = fill(bg)
+              ws2.row_dimensions[r].height = 44
+
+          ws2.freeze_panes = "B2"
+          ws2.auto_filter.ref = f"B1:H{len(AUDIT_RESULTS)+1}"
+
+          # ════════════════════════════════════════════════════════════════
+          # Sheet 3 – CHART
+          # ════════════════════════════════════════════════════════════════
+          ws3 = wb.create_sheet("Chart")
+          ws3.sheet_view.showGridLines = False
+          ws3.column_dimensions["A"].width = 2
+
+          for ri, (s, v) in enumerate([("Status","Count"),
+                                        ("PASS", META["pass"]),
+                                        ("FAIL", META["fail"]),
+                                        ("SKIP", META["skip"]),
+                                        ("INFO", META["info"])], 1):
+              ws3.cell(row=ri, column=2, value=s)
+              ws3.cell(row=ri, column=3, value=v)
+
+          chart = BarChart()
+          chart.type   = "col"
+          chart.title  = "Sections 2 & 3 - Audit Results by Status"
+          chart.y_axis.title = "Number of Checks"
+          chart.x_axis.title = "Status"
+          chart.style  = 10
+          chart.width  = 20
+          chart.height = 14
+          chart.add_data(Reference(ws3, min_col=3, max_col=3, min_row=1, max_row=5),
+                         titles_from_data=True)
+          chart.set_categories(Reference(ws3, min_col=2, max_col=2, min_row=2, max_row=5))
+          ws3.add_chart(chart, "B2")
+
+          wb.save(OUTPUT)
+          print(f"Report saved: {OUTPUT}")
+
+    # ──────────────────────────────────────────────
+    # Run the Python script on the target host
+    # ──────────────────────────────────────────────
+    - name: Generate Excel report
+      command: "python3 {{ python_script }}"
+      register: excel_gen
+      changed_when: false
+
+    - name: Show generator output
+      debug:
+        msg: "{{ excel_gen.stdout }}"
+
+    # ──────────────────────────────────────────────
+    # Fetch Excel report to controller
+    # ──────────────────────────────────────────────
+    - name: Fetch Excel report to controller
+      fetch:
+        src: "{{ report_file }}"
+        dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section2_3.xlsx"
+        flat: true
+
+    # ──────────────────────────────────────────────
+    # Cleanup temp files from target
+    # ──────────────────────────────────────────────
+    - name: Remove temp files from target
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ python_script }}"
+        - "{{ data_file }}"
+
+    # ──────────────────────────────────────────────
+    # Console summary
+    # ──────────────────────────────────────────────
+    - name: Print audit summary
+      debug:
+        msg: |
+          ┌──────────────────────────────────────────────────┐
+          │  Docker CIS Benchmark - Sections 2 & 3 Summary  │
+          ├──────────────────────────────────────────────────┤
+          │  TOTAL:  {{ summary_total }}
+          │  PASS:   {{ summary_pass }}
+          │  FAIL:   {{ summary_fail }}
+          │  SKIP:   {{ summary_skip }}
+          │  INFO:   {{ summary_info }}
+          └──────────────────────────────────────────────────┘
+          Excel report: ./docker_benchmark_reports/{{ inventory_hostname }}_section2_3.xlsx
 
 
