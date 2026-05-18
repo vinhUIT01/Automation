@@ -1,4 +1,5 @@
-- name: "CIS Docker Benchmark - Audit Section 2 & 3 (Excel Report)"
+---
+- name: "CIS Docker Benchmark v1.8.0 - Audit Section 2 & 3 (Excel Report)"
   hosts: docker
   become: true
   gather_facts: true
@@ -25,292 +26,1351 @@
         state: present
       failed_when: false
 
-    # ---------------------------------------------------------------
-    # SECTION 2: Docker Daemon Configuration
-    # ---------------------------------------------------------------
-    - name: 2.1 Ensure TLS Authentication is enabled
-      ansible.builtin.shell: |
-        grep -E '"tls":\s*true' /etc/docker/daemon.json && \
-        grep -E '"tlsverify":\s*true' /etc/docker/daemon.json
-      register: tls_audit
+    - name: Get Docker version
+      command: docker version --format '{{ '{{' }}.Server.Version{{ '}}' }}'
+      register: docker_version
+      changed_when: false
       failed_when: false
 
-    - name: 2.1 Evaluate TLS Authentication
+    # ──────────────────────────────────────────────
+    # SECTION 2: Docker Daemon Configuration
+    # ──────────────────────────────────────────────
+
+    # ──────────────────────────────────────────────
+    # 2.1 – Run Docker daemon as non-root user (Manual)
+    # ──────────────────────────────────────────────
+    - name: "2.1 | Evaluate Docker daemon running as non-root"
       set_fact:
         check_2_1:
           id: "2.1"
           section: "Section 2 - Docker Daemon Configuration"
-          title: "Ensure TLS Authentication is enabled"
-          status: >-
-            {{ 'PASS' if tls_audit.rc == 0 else 'FAIL' }}
+          title: "Run the Docker daemon as a non-root user, if possible"
+          status: "INFO"
           details: >-
-            {{ 'TLS Authentication is enabled with TLS and TLSVerify configured.'
-               if tls_audit.rc == 0 else
-               'TLS Authentication is NOT correctly enabled in daemon.json' }}
+            Manual check required. Verify if Docker is running as non-root user.
+            Standard Docker installations run as root. Rootless mode requires manual setup.
           remediation: >-
-            Configure TLS in /etc/docker/daemon.json with "tls": true and "tlsverify": true.
-            Ensure CA, server cert, and server key paths are correctly specified.
-          raw_output: "{{ tls_audit.stdout | default('N/A') | string }}"
+            Consider rootless Docker installation: https://docs.docker.com/engine/security/rootless/
+          raw_output: "Manual check - review with: ps -ef | grep dockerd"
 
-    - name: 2.1 Append result
+    - name: "2.1 | Append result"
       set_fact:
         audit_results: "{{ audit_results + [check_2_1] }}"
 
-    - name: 2.2 Ensure logging is configured correctly
+    # ──────────────────────────────────────────────
+    # 2.2 – Restrict network traffic between containers
+    # ──────────────────────────────────────────────
+    - name: "2.2 | Audit inter-container communication setting"
       ansible.builtin.shell: |
-        grep -E '"log-driver":\s*"json-file"' /etc/docker/daemon.json && \
-        grep -E '"max-size":\s*"10m"' /etc/docker/daemon.json && \
-        grep -E '"max-file":\s*"3"' /etc/docker/daemon.json
-      register: logging_audit
+        grep -E '"icc":\s*false' /etc/docker/daemon.json
+      register: check_2_2_raw
       failed_when: false
+      changed_when: false
 
-    - name: 2.2 Evaluate Logging Configuration
+    - name: "2.2 | Evaluate inter-container communication"
       set_fact:
         check_2_2:
           id: "2.2"
           section: "Section 2 - Docker Daemon Configuration"
-          title: "Ensure logging is configured correctly"
+          title: "Ensure network traffic is restricted between containers on the default bridge"
           status: >-
-            {{ 'PASS' if logging_audit.rc == 0 else 'FAIL' }}
+            {{ 'PASS' if check_2_2_raw.rc == 0 else 'FAIL' }}
           details: >-
-            {{ 'Logging is configured correctly with json-file driver, 10m max-size, 3 max-file.'
-               if logging_audit.rc == 0 else
-               'Logging is NOT configured correctly (Expected: json-file, 10m, 3)' }}
+            {{ 'ICC (inter-container communication) is disabled.'
+               if check_2_2_raw.rc == 0 else
+               'ICC is NOT disabled. Containers can communicate freely on the default bridge.' }}
           remediation: >-
-            Configure logging in /etc/docker/daemon.json:
-            {"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}
-          raw_output: "{{ logging_audit.stdout | default('N/A') | string }}"
+            Add "icc": false to /etc/docker/daemon.json and restart Docker.
+          raw_output: "{{ check_2_2_raw.stdout | default('N/A') | string }}"
 
-    - name: 2.2 Append result
+    - name: "2.2 | Append result"
       set_fact:
         audit_results: "{{ audit_results + [check_2_2] }}"
 
-    - name: 2.3 Ensure User Namespace Remapping is enabled
+    # ──────────────────────────────────────────────
+    # 2.3 – Logging level set to 'info'
+    # ──────────────────────────────────────────────
+    - name: "2.3 | Audit logging level configuration"
       ansible.builtin.shell: |
-        grep -E '"userns-remap":\s*"default"' /etc/docker/daemon.json && \
-        [ -f /etc/subuid ] && [ -f /etc/subgid ]
-      register: userns_audit
+        grep -E '"log-level":\s*"info"' /etc/docker/daemon.json
+      register: check_2_3_raw
       failed_when: false
+      changed_when: false
 
-    - name: 2.3 Evaluate User Namespace Remapping
+    - name: "2.3 | Evaluate logging level"
       set_fact:
         check_2_3:
           id: "2.3"
           section: "Section 2 - Docker Daemon Configuration"
-          title: "Ensure User Namespace Remapping is enabled"
+          title: "Ensure the logging level is set to 'info'"
           status: >-
-            {{ 'PASS' if userns_audit.rc == 0 else 'FAIL' }}
+            {{ 'PASS' if check_2_3_raw.rc == 0 else 'FAIL' }}
           details: >-
-            {{ 'User Namespace Remapping is enabled with default profile and subuid/subgid files present.'
-               if userns_audit.rc == 0 else
-               'User Namespace Remapping is NOT enabled or subuid/subgid files missing' }}
+            {{ 'Logging level is set to info.'
+               if check_2_3_raw.rc == 0 else
+               'Logging level is NOT set to info. Default may be too verbose or not verbose enough.' }}
           remediation: >-
-            Add "userns-remap": "default" to /etc/docker/daemon.json and restart Docker.
-            Ensure /etc/subuid and /etc/subgid files exist.
-          raw_output: "{{ userns_audit.stdout | default('N/A') | string }}"
+            Add "log-level": "info" to /etc/docker/daemon.json
+          raw_output: "{{ check_2_3_raw.stdout | default('N/A') | string }}"
 
-    - name: 2.3 Append result
+    - name: "2.3 | Append result"
       set_fact:
         audit_results: "{{ audit_results + [check_2_3] }}"
 
-    - name: 2.4 Ensure Legacy Registry is disabled
+    # ──────────────────────────────────────────────
+    # 2.4 – Docker allowed to make changes to iptables
+    # ──────────────────────────────────────────────
+    - name: "2.4 | Audit iptables configuration"
       ansible.builtin.shell: |
-        grep -E '"disable-legacy-registry":\s*true' /etc/docker/daemon.json
-      register: legacy_reg_audit
+        grep -E '"iptables":\s*true' /etc/docker/daemon.json || echo "INFO: Default is true"
+      register: check_2_4_raw
       failed_when: false
+      changed_when: false
 
-    - name: 2.4 Evaluate Legacy Registry
+    - name: "2.4 | Evaluate iptables configuration"
       set_fact:
         check_2_4:
           id: "2.4"
           section: "Section 2 - Docker Daemon Configuration"
-          title: "Ensure Legacy Registry is disabled"
+          title: "Ensure Docker is allowed to make changes to iptables"
           status: >-
-            {{ 'PASS' if legacy_reg_audit.rc == 0 else 'FAIL' }}
+            {{ 'PASS' if check_2_4_raw.rc == 0 or check_2_4_raw.stdout == 'INFO: Default is true' else 'FAIL' }}
           details: >-
-            {{ 'Legacy Registry is disabled.'
-               if legacy_reg_audit.rc == 0 else
-               'Legacy Registry is NOT disabled' }}
+            {{ 'Docker is configured to manage iptables.'
+               if check_2_4_raw.rc == 0 or check_2_4_raw.stdout == 'INFO: Default is true' else
+               'iptables management is disabled. Docker cannot set up network rules properly.' }}
           remediation: >-
-            Add "disable-legacy-registry": true to /etc/docker/daemon.json
-          raw_output: "{{ legacy_reg_audit.stdout | default('N/A') | string }}"
+            Add "iptables": true to /etc/docker/daemon.json
+          raw_output: "{{ check_2_4_raw.stdout | default('N/A') | string }}"
 
-    - name: 2.4 Append result
+    - name: "2.4 | Append result"
       set_fact:
         audit_results: "{{ audit_results + [check_2_4] }}"
 
-    - name: 2.5 Ensure Live Restore is enabled
+    # ──────────────────────────────────────────────
+    # 2.5 – Insecure registries not used
+    # ──────────────────────────────────────────────
+    - name: "2.5 | Audit insecure registries configuration"
       ansible.builtin.shell: |
-        grep -E '"live-restore":\s*true' /etc/docker/daemon.json
-      register: live_restore_audit
+        grep -E '"insecure-registries":\s*\[\]' /etc/docker/daemon.json || \
+        grep -v '"insecure-registries"' /etc/docker/daemon.json > /dev/null 2>&1 && echo "PASS"
+      register: check_2_5_raw
       failed_when: false
+      changed_when: false
 
-    - name: 2.5 Evaluate Live Restore
+    - name: "2.5 | Evaluate insecure registries"
       set_fact:
         check_2_5:
           id: "2.5"
           section: "Section 2 - Docker Daemon Configuration"
-          title: "Ensure Live Restore is enabled"
+          title: "Ensure insecure registries are not used"
           status: >-
-            {{ 'PASS' if live_restore_audit.rc == 0 else 'FAIL' }}
+            {{ 'PASS' if check_2_5_raw.rc == 0 else 'FAIL' }}
           details: >-
-            {{ 'Live Restore is enabled - containers continue running if Docker daemon stops.'
-               if live_restore_audit.rc == 0 else
-               'Live Restore is NOT enabled' }}
+            {{ 'No insecure registries configured.'
+               if check_2_5_raw.rc == 0 else
+               'Insecure registries are configured. This allows unencrypted image pulls.' }}
           remediation: >-
-            Add "live-restore": true to /etc/docker/daemon.json and restart Docker.
-          raw_output: "{{ live_restore_audit.stdout | default('N/A') | string }}"
+            Remove insecure registries from /etc/docker/daemon.json or set to empty array: []
+          raw_output: "{{ check_2_5_raw.stdout | default('N/A') | string }}"
 
-    - name: 2.5 Append result
+    - name: "2.5 | Append result"
       set_fact:
         audit_results: "{{ audit_results + [check_2_5] }}"
 
-    # ---------------------------------------------------------------
+    # ──────────────────────────────────────────────
+    # 2.6 – aufs storage driver not used
+    # ──────────────────────────────────────────────
+    - name: "2.6 | Audit storage driver"
+      command: docker info --format '{{ '{{' }}.Driver{{ '}}' }}'
+      register: check_2_6_raw
+      changed_when: false
+      failed_when: false
+
+    - name: "2.6 | Evaluate aufs storage driver"
+      set_fact:
+        check_2_6:
+          id: "2.6"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure aufs storage driver is not used"
+          status: >-
+            {{ 'PASS' if check_2_6_raw.stdout != 'aufs' else 'FAIL' }}
+          details: >-
+            {{ 'Storage driver is ' ~ check_2_6_raw.stdout ~ ' (not aufs).'
+               if check_2_6_raw.stdout != 'aufs' else
+               'aufs storage driver is in use. This driver is deprecated.' }}
+          remediation: >-
+            Change storage driver to overlay2 in /etc/docker/daemon.json:
+            {"storage-driver": "overlay2"}
+          raw_output: "{{ check_2_6_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.6 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_6] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.7 – devicemapper storage driver not used
+    # ──────────────────────────────────────────────
+    - name: "2.7 | Evaluate devicemapper storage driver"
+      set_fact:
+        check_2_7:
+          id: "2.7"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure devicemapper storage driver is not used"
+          status: >-
+            {{ 'PASS' if check_2_6_raw.stdout != 'devicemapper' else 'FAIL' }}
+          details: >-
+            {{ 'Storage driver is ' ~ check_2_6_raw.stdout ~ ' (not devicemapper).'
+               if check_2_6_raw.stdout != 'devicemapper' else
+               'devicemapper storage driver is in use. This driver is deprecated.' }}
+          remediation: >-
+            Change storage driver to overlay2 in /etc/docker/daemon.json:
+            {"storage-driver": "overlay2"}
+          raw_output: "{{ check_2_6_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.7 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_7] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.8 – TLS authentication for Docker daemon
+    # ──────────────────────────────────────────────
+    - name: "2.8 | Audit TLS authentication configuration"
+      ansible.builtin.shell: |
+        grep -E '"tls":\s*true' /etc/docker/daemon.json && \
+        grep -E '"tlsverify":\s*true' /etc/docker/daemon.json
+      register: check_2_8_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.8 | Evaluate TLS authentication"
+      set_fact:
+        check_2_8:
+          id: "2.8"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure TLS authentication for Docker daemon is configured"
+          status: >-
+            {{ 'PASS' if check_2_8_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'TLS authentication is enabled with tls and tlsverify configured.'
+               if check_2_8_raw.rc == 0 else
+               'TLS authentication is NOT configured. Docker API communications may be unencrypted.' }}
+          remediation: >-
+            Configure TLS in /etc/docker/daemon.json with "tls": true and "tlsverify": true.
+            Ensure CA, server cert, and server key paths are correctly specified.
+          raw_output: "{{ check_2_8_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.8 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_8] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.9 – Default ulimit configured appropriately
+    # ──────────────────────────────────────────────
+    - name: "2.9 | Audit default ulimit configuration"
+      ansible.builtin.shell: |
+        grep -E '"default-ulimits":\s*\{' /etc/docker/daemon.json
+      register: check_2_9_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.9 | Evaluate default ulimit"
+      set_fact:
+        check_2_9:
+          id: "2.9"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure the default ulimit is configured appropriately"
+          status: >-
+            {{ 'PASS' if check_2_9_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Default ulimits are configured in daemon.json.'
+               if check_2_9_raw.rc == 0 else
+               'Default ulimits are NOT configured. Containers may exhaust system resources.' }}
+          remediation: >-
+            Configure default ulimits in /etc/docker/daemon.json:
+            {"default-ulimits": {"nofile": {"Hard": 64000, "Name": "nofile", "Soft": 64000}}}
+          raw_output: "{{ check_2_9_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.9 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_9] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.10 – User namespace support enabled
+    # ──────────────────────────────────────────────
+    - name: "2.10 | Audit user namespace remapping"
+      ansible.builtin.shell: |
+        grep -E '"userns-remap":\s*"default"' /etc/docker/daemon.json && \
+        [ -f /etc/subuid ] && [ -f /etc/subgid ]
+      register: check_2_10_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.10 | Evaluate user namespace support"
+      set_fact:
+        check_2_10:
+          id: "2.10"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Enable user namespace support"
+          status: >-
+            {{ 'PASS' if check_2_10_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'User namespace remapping is enabled with default profile.'
+               if check_2_10_raw.rc == 0 else
+               'User namespace remapping is NOT enabled. Container processes run with same UIDs as host.' }}
+          remediation: >-
+            Add "userns-remap": "default" to /etc/docker/daemon.json and restart Docker.
+            Ensure /etc/subuid and /etc/subgid files exist with dockremap entries.
+          raw_output: "{{ check_2_10_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.10 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_10] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.11 – Default cgroup usage confirmed
+    # ──────────────────────────────────────────────
+    - name: "2.11 | Audit cgroup configuration"
+      ansible.builtin.shell: |
+        docker info --format '{{ '{{' }}.CgroupDriver{{ '}}' }}' 2>/dev/null || echo "INFO"
+      register: check_2_11_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.11 | Evaluate cgroup usage"
+      set_fact:
+        check_2_11:
+          id: "2.11"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure the default cgroup usage has been confirmed"
+          status: "INFO"
+          details: >-
+            {{ 'Cgroup driver: ' ~ check_2_11_raw.stdout
+               if check_2_11_raw.stdout != 'INFO' else
+               'Review cgroup configuration. Default cgroup usage should be confirmed.' }}
+          remediation: >-
+            Review cgroup driver configuration. Use cgroupfs or systemd consistently.
+          raw_output: "{{ check_2_11_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.11 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_11] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.12 – Base device size not changed until needed
+    # ──────────────────────────────────────────────
+    - name: "2.12 | Audit base device size configuration"
+      ansible.builtin.shell: |
+        grep -E '"storage-opts":' /etc/docker/daemon.json | grep -i 'basesize' || echo "PASS: No custom base size"
+      register: check_2_12_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.12 | Evaluate base device size"
+      set_fact:
+        check_2_12:
+          id: "2.12"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure base device size is not changed until needed"
+          status: >-
+            {{ 'PASS' if check_2_12_raw.stdout == 'PASS: No custom base size' else 'INFO' }}
+          details: >-
+            {{ check_2_12_raw.stdout }}
+          remediation: >-
+            Do not set dm.basesize unless required. Default is sufficient for most use cases.
+          raw_output: "{{ check_2_12_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.12 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_12] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.13 – Authorization for Docker client commands enabled
+    # ──────────────────────────────────────────────
+    - name: "2.13 | Audit authorization plugins configuration"
+      ansible.builtin.shell: |
+        grep -E '"authorization-plugins":\s*\[' /etc/docker/daemon.json
+      register: check_2_13_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.13 | Evaluate authorization plugins"
+      set_fact:
+        check_2_13:
+          id: "2.13"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure that authorization for Docker client commands is enabled"
+          status: >-
+            {{ 'PASS' if check_2_13_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Authorization plugins are configured in daemon.json.'
+               if check_2_13_raw.rc == 0 else
+               'Authorization plugins are NOT configured. Docker commands are not audited/controlled.' }}
+          remediation: >-
+            Add authorization plugins to /etc/docker/daemon.json:
+            {"authorization-plugins": ["openpolicyagent/opa-docker-authz"]}
+          raw_output: "{{ check_2_13_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.13 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_13] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.14 – Centralized and remote logging configured
+    # ──────────────────────────────────────────────
+    - name: "2.14 | Audit centralized logging configuration"
+      ansible.builtin.shell: |
+        grep -E '"log-driver":\s*"(syslog|journald|fluentd|awslogs)"' /etc/docker/daemon.json
+      register: check_2_14_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.14 | Evaluate centralized logging"
+      set_fact:
+        check_2_14:
+          id: "2.14"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure centralized and remote logging is configured"
+          status: >-
+            {{ 'PASS' if check_2_14_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Centralized logging driver is configured.'
+               if check_2_14_raw.rc == 0 else
+               'Centralized logging is NOT configured. Logs may be lost if host fails.' }}
+          remediation: >-
+            Configure a centralized logging driver in /etc/docker/daemon.json:
+            {"log-driver": "syslog", "log-opts": {"syslog-address": "tcp://192.168.0.42:12345"}}
+          raw_output: "{{ check_2_14_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.14 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_14] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.15 – Containers restricted from acquiring new privileges
+    # ──────────────────────────────────────────────
+    - name: "2.15 | Audit no-new-privileges configuration"
+      ansible.builtin.shell: |
+        grep -E '"no-new-privileges":\s*true' /etc/docker/daemon.json
+      register: check_2_15_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.15 | Evaluate no-new-privileges"
+      set_fact:
+        check_2_15:
+          id: "2.15"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure containers are restricted from acquiring new privileges"
+          status: >-
+            {{ 'PASS' if check_2_15_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'no-new-privileges is set to true in daemon.json.'
+               if check_2_15_raw.rc == 0 else
+               'no-new-privileges is NOT set. Containers can escalate privileges via setuid binaries.' }}
+          remediation: >-
+            Add "no-new-privileges": true to /etc/docker/daemon.json
+          raw_output: "{{ check_2_15_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.15 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_15] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.16 – Live restore enabled
+    # ──────────────────────────────────────────────
+    - name: "2.16 | Audit live restore configuration"
+      ansible.builtin.shell: |
+        grep -E '"live-restore":\s*true' /etc/docker/daemon.json
+      register: check_2_16_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.16 | Evaluate live restore"
+      set_fact:
+        check_2_16:
+          id: "2.16"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure live restore is enabled"
+          status: >-
+            {{ 'PASS' if check_2_16_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Live restore is enabled. Containers survive Docker daemon restarts.'
+               if check_2_16_raw.rc == 0 else
+               'Live restore is NOT enabled. Containers stop when Docker daemon restarts.' }}
+          remediation: >-
+            Add "live-restore": true to /etc/docker/daemon.json
+          raw_output: "{{ check_2_16_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.16 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_16] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.17 – Userland Proxy Disabled
+    # ──────────────────────────────────────────────
+    - name: "2.17 | Audit userland proxy configuration"
+      ansible.builtin.shell: |
+        grep -E '"userland-proxy":\s*false' /etc/docker/daemon.json
+      register: check_2_17_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.17 | Evaluate userland proxy"
+      set_fact:
+        check_2_17:
+          id: "2.17"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure Userland Proxy is Disabled"
+          status: >-
+            {{ 'PASS' if check_2_17_raw.rc == 0 else 'FAIL' }}
+          details: >-
+            {{ 'Userland proxy is disabled. Docker uses kernel NAT for better performance.'
+               if check_2_17_raw.rc == 0 else
+               'Userland proxy is enabled. This can cause performance issues and port conflicts.' }}
+          remediation: >-
+            Add "userland-proxy": false to /etc/docker/daemon.json
+          raw_output: "{{ check_2_17_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.17 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_17] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.18 – Daemon-wide custom seccomp profile (if appropriate)
+    # ──────────────────────────────────────────────
+    - name: "2.18 | Audit seccomp profile configuration"
+      ansible.builtin.shell: |
+        grep -E '"seccomp-profile":' /etc/docker/daemon.json || echo "INFO: Using default seccomp profile"
+      register: check_2_18_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.18 | Evaluate seccomp profile"
+      set_fact:
+        check_2_18:
+          id: "2.18"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure that a daemon-wide custom seccomp profile is applied if appropriate"
+          status: "INFO"
+          details: >-
+            {{ check_2_18_raw.stdout }}
+          remediation: >-
+            If custom seccomp is needed, configure in daemon.json:
+            {"seccomp-profile": "/etc/docker/seccomp/profile.json"}
+          raw_output: "{{ check_2_18_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.18 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_18] }}"
+
+    # ──────────────────────────────────────────────
+    # 2.19 – Experimental features not implemented in production
+    # ──────────────────────────────────────────────
+    - name: "2.19 | Audit experimental features"
+      ansible.builtin.shell: |
+        grep -E '"experimental":\s*true' /etc/docker/daemon.json || echo "PASS"
+      register: check_2_19_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "2.19 | Evaluate experimental features"
+      set_fact:
+        check_2_19:
+          id: "2.19"
+          section: "Section 2 - Docker Daemon Configuration"
+          title: "Ensure that experimental features are not implemented in production"
+          status: >-
+            {{ 'PASS' if check_2_19_raw.stdout == 'PASS' else 'FAIL' }}
+          details: >-
+            {{ 'Experimental features are NOT enabled.'
+               if check_2_19_raw.stdout == 'PASS' else
+               'Experimental features ARE enabled. This is not recommended for production.' }}
+          remediation: >-
+            Remove or set "experimental": false in /etc/docker/daemon.json
+          raw_output: "{{ check_2_19_raw.stdout | default('N/A') | string }}"
+
+    - name: "2.19 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_2_19] }}"
+
+    # ──────────────────────────────────────────────
     # SECTION 3: Docker Daemon Configuration Files
-    # ---------------------------------------------------------------
-    - name: 3.1.1 Audit /var/run/docker.sock ownership and permissions
+    # ──────────────────────────────────────────────
+
+    # ──────────────────────────────────────────────
+    # 3.1 – docker.service file ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.1 | Audit docker.service file ownership"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/lib/systemd/system/docker.service
+        - /etc/systemd/system/docker.service
+        - /lib/systemd/system/docker.service
+      register: check_3_1_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.1 | Evaluate docker.service ownership"
+      set_fact:
+        check_3_1:
+          id: "3.1"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the docker.service file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if (check_3_1_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'PASS' if (check_3_1_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                         selectattr('stat.pw_name', 'equalto', 'root') | 
+                         selectattr('stat.gr_name', 'equalto', 'root') | list | length) > 0 else
+               'FAIL' }}
+          details: >-
+            {{ 'No docker.service file found.' if (check_3_1_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'docker.service ownership is correct (root:root).'
+               if (check_3_1_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                   selectattr('stat.pw_name', 'equalto', 'root') | 
+                   selectattr('stat.gr_name', 'equalto', 'root') | list | length) > 0 else
+               'docker.service ownership is incorrect. Expected root:root.' }}
+          remediation: >-
+            chown root:root /usr/lib/systemd/system/docker.service
+          raw_output: >-
+            {{ check_3_1_raw.results | selectattr('stat.exists', 'defined') | 
+               map(attribute='stat') | map(attribute='pw_name') | list | default('N/A') | string }}
+
+    - name: "3.1 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_1] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.2 – docker.service file permissions (644)
+    # ──────────────────────────────────────────────
+    - name: "3.2 | Audit docker.service file permissions"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/lib/systemd/system/docker.service
+        - /etc/systemd/system/docker.service
+        - /lib/systemd/system/docker.service
+      register: check_3_2_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.2 | Evaluate docker.service permissions"
+      set_fact:
+        check_3_2:
+          id: "3.2"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that docker.service file permissions are appropriately set"
+          status: >-
+            {{ 'SKIP' if (check_3_2_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'PASS' if (check_3_2_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                         selectattr('stat.mode', 'in', ['0644', '0444']) | list | length) > 0 else
+               'FAIL' }}
+          details: >-
+            {{ 'No docker.service file found.' if (check_3_2_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'docker.service permissions are correct (644 or 444).'
+               if (check_3_2_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                   selectattr('stat.mode', 'in', ['0644', '0444']) | list | length) > 0 else
+               'docker.service permissions are incorrect. Expected 644 or more restrictive.' }}
+          remediation: >-
+            chmod 644 /usr/lib/systemd/system/docker.service
+          raw_output: >-
+            {{ check_3_2_raw.results | selectattr('stat.exists', 'defined') | 
+               map(attribute='stat') | map(attribute='mode') | list | default('N/A') | string }}
+
+    - name: "3.2 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_2] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.3 – docker.socket file ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.3 | Audit docker.socket file ownership"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/lib/systemd/system/docker.socket
+        - /etc/systemd/system/docker.socket
+        - /lib/systemd/system/docker.socket
+      register: check_3_3_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.3 | Evaluate docker.socket ownership"
+      set_fact:
+        check_3_3:
+          id: "3.3"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that docker.socket file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if (check_3_3_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'PASS' if (check_3_3_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                         selectattr('stat.pw_name', 'equalto', 'root') | 
+                         selectattr('stat.gr_name', 'equalto', 'root') | list | length) > 0 else
+               'FAIL' }}
+          details: >-
+            {{ 'No docker.socket file found.' if (check_3_3_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'docker.socket ownership is correct (root:root).'
+               if (check_3_3_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                   selectattr('stat.pw_name', 'equalto', 'root') | 
+                   selectattr('stat.gr_name', 'equalto', 'root') | list | length) > 0 else
+               'docker.socket ownership is incorrect. Expected root:root.' }}
+          remediation: >-
+            chown root:root /usr/lib/systemd/system/docker.socket
+          raw_output: >-
+            {{ check_3_3_raw.results | selectattr('stat.exists', 'defined') | 
+               map(attribute='stat') | map(attribute='pw_name') | list | default('N/A') | string }}
+
+    - name: "3.3 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_3] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.4 – docker.socket file permissions (644)
+    # ──────────────────────────────────────────────
+    - name: "3.4 | Audit docker.socket file permissions"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/lib/systemd/system/docker.socket
+        - /etc/systemd/system/docker.socket
+        - /lib/systemd/system/docker.socket
+      register: check_3_4_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.4 | Evaluate docker.socket permissions"
+      set_fact:
+        check_3_4:
+          id: "3.4"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that docker.socket file permissions are set to 644 or more restrictive"
+          status: >-
+            {{ 'SKIP' if (check_3_4_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'PASS' if (check_3_4_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                         selectattr('stat.mode', 'in', ['0644', '0444']) | list | length) > 0 else
+               'FAIL' }}
+          details: >-
+            {{ 'No docker.socket file found.' if (check_3_4_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length) == 0 else
+               'docker.socket permissions are correct (644 or 444).'
+               if (check_3_4_raw.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | 
+                   selectattr('stat.mode', 'in', ['0644', '0444']) | list | length) > 0 else
+               'docker.socket permissions are incorrect. Expected 644 or more restrictive.' }}
+          remediation: >-
+            chmod 644 /usr/lib/systemd/system/docker.socket
+          raw_output: >-
+            {{ check_3_4_raw.results | selectattr('stat.exists', 'defined') | 
+               map(attribute='stat') | map(attribute='mode') | list | default('N/A') | string }}
+
+    - name: "3.4 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_4] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.5 – Registry certificate file ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.5 | Find registry certificate files"
+      find:
+        paths: /etc/docker/certs.d
+        patterns: "*.crt,*.cert,*.pem"
+      register: check_3_5_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.5 | Evaluate registry certificate ownership"
+      set_fact:
+        check_3_5:
+          id: "3.5"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that registry certificate file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if (check_3_5_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_5_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                         selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_5_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No registry certificates found in /etc/docker/certs.d.' if (check_3_5_raw.files | default([]) | length) == 0 else
+               'Registry certificate ownership is correct (root:root).'
+               if (check_3_5_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                   selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_5_raw.files | length) else
+               'Some registry certificates have incorrect ownership.' }}
+          remediation: >-
+            chown root:root /etc/docker/certs.d/*/*.crt
+          raw_output: >-
+            {{ check_3_5_raw.files | default([]) | length | string ~ ' certificate(s) found' }}
+
+    - name: "3.5 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_5] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.6 – Registry certificate file permissions (444)
+    # ──────────────────────────────────────────────
+    - name: "3.6 | Evaluate registry certificate permissions"
+      set_fact:
+        check_3_6:
+          id: "3.6"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that registry certificate file permissions are set to 444 or more restrictively"
+          status: >-
+            {{ 'SKIP' if (check_3_5_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_5_raw.files | selectattr('mode', 'in', ['0444', '0644']) | list | length) == (check_3_5_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No registry certificates found.' if (check_3_5_raw.files | default([]) | length) == 0 else
+               'Registry certificate permissions are correct (444 or 644).'
+               if (check_3_5_raw.files | selectattr('mode', 'in', ['0444', '0644']) | list | length) == (check_3_5_raw.files | length) else
+               'Some registry certificates have incorrect permissions.' }}
+          remediation: >-
+            chmod 444 /etc/docker/certs.d/*/*.crt
+          raw_output: >-
+            {{ check_3_5_raw.files | default([]) | map(attribute='mode') | list | string }}
+
+    - name: "3.6 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_6] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.7 – TLS CA certificate ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.7 | Find TLS CA certificate"
+      find:
+        paths: /etc/docker
+        patterns: "ca*.pem,ca*.crt,cacert.pem"
+      register: check_3_7_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.7 | Evaluate TLS CA certificate ownership"
+      set_fact:
+        check_3_7:
+          id: "3.7"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that TLS CA certificate ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if (check_3_7_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_7_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                         selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_7_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No TLS CA certificates found.' if (check_3_7_raw.files | default([]) | length) == 0 else
+               'TLS CA certificate ownership is correct (root:root).'
+               if (check_3_7_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                   selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_7_raw.files | length) else
+               'TLS CA certificate ownership is incorrect.' }}
+          remediation: >-
+            chown root:root /etc/docker/ca*.pem
+          raw_output: >-
+            {{ check_3_7_raw.files | default([]) | length | string ~ ' CA certificate(s) found' }}
+
+    - name: "3.7 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_7] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.8 – TLS CA certificate permissions (444)
+    # ──────────────────────────────────────────────
+    - name: "3.8 | Evaluate TLS CA certificate permissions"
+      set_fact:
+        check_3_8:
+          id: "3.8"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that TLS CA certificate permissions are set to 444 or more restrictively"
+          status: >-
+            {{ 'SKIP' if (check_3_7_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_7_raw.files | selectattr('mode', 'in', ['0444', '0644']) | list | length) == (check_3_7_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No TLS CA certificates found.' if (check_3_7_raw.files | default([]) | length) == 0 else
+               'TLS CA certificate permissions are correct (444 or 644).'
+               if (check_3_7_raw.files | selectattr('mode', 'in', ['0444', '0644']) | list | length) == (check_3_7_raw.files | length) else
+               'TLS CA certificate permissions are incorrect.' }}
+          remediation: >-
+            chmod 444 /etc/docker/ca*.pem
+          raw_output: >-
+            {{ check_3_7_raw.files | default([]) | map(attribute='mode') | list | string }}
+
+    - name: "3.8 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_8] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.9 – Docker server certificate ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.9 | Find Docker server certificate"
+      find:
+        paths: /etc/docker
+        patterns: "server*.pem,server*.crt,server-cert.pem"
+      register: check_3_9_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.9 | Evaluate server certificate ownership"
+      set_fact:
+        check_3_9:
+          id: "3.9"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that Docker server certificate file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if (check_3_9_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_9_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                         selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_9_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No Docker server certificates found.' if (check_3_9_raw.files | default([]) | length) == 0 else
+               'Docker server certificate ownership is correct (root:root).'
+               if (check_3_9_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                   selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_9_raw.files | length) else
+               'Docker server certificate ownership is incorrect.' }}
+          remediation: >-
+            chown root:root /etc/docker/server*.pem
+          raw_output: >-
+            {{ check_3_9_raw.files | default([]) | length | string ~ ' server certificate(s) found' }}
+
+    - name: "3.9 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_9] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.10 – Docker server certificate permissions (444)
+    # ──────────────────────────────────────────────
+    - name: "3.10 | Evaluate server certificate permissions"
+      set_fact:
+        check_3_10:
+          id: "3.10"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that Docker server certificate file permissions are set to 444 or more restrictively"
+          status: >-
+            {{ 'SKIP' if (check_3_9_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_9_raw.files | selectattr('mode', 'in', ['0444', '0644']) | list | length) == (check_3_9_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No Docker server certificates found.' if (check_3_9_raw.files | default([]) | length) == 0 else
+               'Docker server certificate permissions are correct (444 or 644).'
+               if (check_3_9_raw.files | selectattr('mode', 'in', ['0444', '0644']) | list | length) == (check_3_9_raw.files | length) else
+               'Docker server certificate permissions are incorrect.' }}
+          remediation: >-
+            chmod 444 /etc/docker/server*.pem
+          raw_output: >-
+            {{ check_3_9_raw.files | default([]) | map(attribute='mode') | list | string }}
+
+    - name: "3.10 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_10] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.11 – Docker server certificate key ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.11 | Find Docker server certificate key"
+      find:
+        paths: /etc/docker
+        patterns: "server*.key,server-key.pem"
+      register: check_3_11_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.11 | Evaluate server key ownership"
+      set_fact:
+        check_3_11:
+          id: "3.11"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the Docker server certificate key file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if (check_3_11_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_11_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                         selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_11_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No Docker server keys found.' if (check_3_11_raw.files | default([]) | length) == 0 else
+               'Docker server key ownership is correct (root:root).'
+               if (check_3_11_raw.files | selectattr('pw_name', 'equalto', 'root') | 
+                   selectattr('gr_name', 'equalto', 'root') | list | length) == (check_3_11_raw.files | length) else
+               'Docker server key ownership is incorrect.' }}
+          remediation: >-
+            chown root:root /etc/docker/server*.key
+          raw_output: >-
+            {{ check_3_11_raw.files | default([]) | length | string ~ ' server key(s) found' }}
+
+    - name: "3.11 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_11] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.12 – Docker server certificate key permissions (400)
+    # ──────────────────────────────────────────────
+    - name: "3.12 | Evaluate server key permissions"
+      set_fact:
+        check_3_12:
+          id: "3.12"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the Docker server certificate key file permissions are set to 400"
+          status: >-
+            {{ 'SKIP' if (check_3_11_raw.files | default([]) | length) == 0 else
+               'PASS' if (check_3_11_raw.files | selectattr('mode', 'in', ['0400', '0600']) | list | length) == (check_3_11_raw.files | length) else
+               'FAIL' }}
+          details: >-
+            {{ 'No Docker server keys found.' if (check_3_11_raw.files | default([]) | length) == 0 else
+               'Docker server key permissions are correct (400 or 600).'
+               if (check_3_11_raw.files | selectattr('mode', 'in', ['0400', '0600']) | list | length) == (check_3_11_raw.files | length) else
+               'Docker server key permissions are incorrect. Keys should be 400.' }}
+          remediation: >-
+            chmod 400 /etc/docker/server*.key
+          raw_output: >-
+            {{ check_3_11_raw.files | default([]) | map(attribute='mode') | list | string }}
+
+    - name: "3.12 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_12] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.13 – Docker socket ownership (root:docker)
+    # ──────────────────────────────────────────────
+    - name: "3.13 | Audit Docker socket ownership"
       ansible.builtin.stat:
         path: /var/run/docker.sock
-      register: docker_sock_audit
+      register: check_3_13_raw
+      failed_when: false
+      changed_when: false
 
-    - name: 3.1.1 Evaluate Docker Socket
+    - name: "3.13 | Evaluate Docker socket ownership"
       set_fact:
-        check_3_1_1:
-          id: "3.1.1"
+        check_3_13:
+          id: "3.13"
           section: "Section 3 - Docker Daemon Configuration Files"
-          title: "Ensure /var/run/docker.sock ownership and permissions are correct"
+          title: "Ensure that the Docker socket file ownership is set to root:docker"
           status: >-
-            {{ 'SKIP' if not docker_sock_audit.stat.exists else
-               'PASS' if (docker_sock_audit.stat.pw_name == 'root' and
-                         docker_sock_audit.stat.gr_name == 'docker' and
-                         docker_sock_audit.stat.mode == '0660') else
+            {{ 'SKIP' if not check_3_13_raw.stat.exists else
+               'PASS' if (check_3_13_raw.stat.pw_name == 'root' and check_3_13_raw.stat.gr_name == 'docker') else
                'FAIL' }}
           details: >-
-            {{ 'Docker socket does not exist.' if not docker_sock_audit.stat.exists else
-               'Docker socket ownership and permissions are correct (root:docker 0660).'
-               if (docker_sock_audit.stat.pw_name == 'root' and
-                   docker_sock_audit.stat.gr_name == 'docker' and
-                   docker_sock_audit.stat.mode == '0660') else
-               'Docker socket check failed. Current: ' ~ docker_sock_audit.stat.pw_name ~ ':' ~
-               docker_sock_audit.stat.gr_name ~ ' ' ~ docker_sock_audit.stat.mode }}
+            {{ 'Docker socket does not exist.' if not check_3_13_raw.stat.exists else
+               'Docker socket ownership is correct (root:docker).'
+               if (check_3_13_raw.stat.pw_name == 'root' and check_3_13_raw.stat.gr_name == 'docker') else
+               'Docker socket ownership is incorrect. Current: ' ~ check_3_13_raw.stat.pw_name ~ ':' ~ check_3_13_raw.stat.gr_name }}
           remediation: >-
-            chown root:docker /var/run/docker.sock && chmod 660 /var/run/docker.sock
+            chown root:docker /var/run/docker.sock
           raw_output: >-
-            {{ 'Socket does not exist' if not docker_sock_audit.stat.exists else
-               docker_sock_audit.stat.pw_name ~ ':' ~ docker_sock_audit.stat.gr_name ~
-               ' mode=' ~ docker_sock_audit.stat.mode }}
+            {{ 'Socket does not exist' if not check_3_13_raw.stat.exists else
+               check_3_13_raw.stat.pw_name ~ ':' ~ check_3_13_raw.stat.gr_name }}
 
-    - name: 3.1.1 Append result
+    - name: "3.13 | Append result"
       set_fact:
-        audit_results: "{{ audit_results + [check_3_1_1] }}"
+        audit_results: "{{ audit_results + [check_3_13] }}"
 
-    - name: 3.1.2 Audit /etc/docker/daemon.json ownership and permissions
+    # ──────────────────────────────────────────────
+    # 3.14 – Docker socket permissions (660)
+    # ──────────────────────────────────────────────
+    - name: "3.14 | Audit Docker socket permissions"
+      ansible.builtin.stat:
+        path: /var/run/docker.sock
+      register: check_3_14_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.14 | Evaluate Docker socket permissions"
+      set_fact:
+        check_3_14:
+          id: "3.14"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the Docker socket file permissions are set to 660 or more restrictively"
+          status: >-
+            {{ 'SKIP' if not check_3_14_raw.stat.exists else
+               'PASS' if check_3_14_raw.stat.mode in ['0660', '0640', '0600'] else
+               'FAIL' }}
+          details: >-
+            {{ 'Docker socket does not exist.' if not check_3_14_raw.stat.exists else
+               'Docker socket permissions are correct (660 or more restrictive).'
+               if check_3_14_raw.stat.mode in ['0660', '0640', '0600'] else
+               'Docker socket permissions are incorrect. Expected 660 or more restrictive. Current: ' ~ check_3_14_raw.stat.mode }}
+          remediation: >-
+            chmod 660 /var/run/docker.sock
+          raw_output: >-
+            {{ 'Socket does not exist' if not check_3_14_raw.stat.exists else
+               check_3_14_raw.stat.mode }}
+
+    - name: "3.14 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_14] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.15 – daemon.json ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.15 | Audit daemon.json ownership"
       ansible.builtin.stat:
         path: /etc/docker/daemon.json
-      register: daemon_json_audit
+      register: check_3_15_raw
+      failed_when: false
+      changed_when: false
 
-    - name: 3.1.2 Evaluate Daemon JSON
+    - name: "3.15 | Evaluate daemon.json ownership"
       set_fact:
-        check_3_1_2:
-          id: "3.1.2"
+        check_3_15:
+          id: "3.15"
           section: "Section 3 - Docker Daemon Configuration Files"
-          title: "Ensure /etc/docker/daemon.json ownership and permissions are correct"
+          title: "Ensure that the daemon.json file ownership is set to root:root"
           status: >-
-            {{ 'SKIP' if not daemon_json_audit.stat.exists else
-               'PASS' if (daemon_json_audit.stat.pw_name == 'root' and
-                         daemon_json_audit.stat.gr_name == 'root' and
-                         daemon_json_audit.stat.mode == '0644') else
+            {{ 'SKIP' if not check_3_15_raw.stat.exists else
+               'PASS' if (check_3_15_raw.stat.pw_name == 'root' and check_3_15_raw.stat.gr_name == 'root') else
                'FAIL' }}
           details: >-
-            {{ 'daemon.json does not exist.' if not daemon_json_audit.stat.exists else
-               'daemon.json ownership and permissions are correct (root:root 0644).'
-               if (daemon_json_audit.stat.pw_name == 'root' and
-                   daemon_json_audit.stat.gr_name == 'root' and
-                   daemon_json_audit.stat.mode == '0644') else
-               'daemon.json check failed. Current: ' ~ daemon_json_audit.stat.pw_name ~ ':' ~
-               daemon_json_audit.stat.gr_name ~ ' ' ~ daemon_json_audit.stat.mode }}
+            {{ 'daemon.json does not exist.' if not check_3_15_raw.stat.exists else
+               'daemon.json ownership is correct (root:root).'
+               if (check_3_15_raw.stat.pw_name == 'root' and check_3_15_raw.stat.gr_name == 'root') else
+               'daemon.json ownership is incorrect. Current: ' ~ check_3_15_raw.stat.pw_name ~ ':' ~ check_3_15_raw.stat.gr_name }}
           remediation: >-
-            chown root:root /etc/docker/daemon.json && chmod 644 /etc/docker/daemon.json
+            chown root:root /etc/docker/daemon.json
           raw_output: >-
-            {{ 'File does not exist' if not daemon_json_audit.stat.exists else
-               daemon_json_audit.stat.pw_name ~ ':' ~ daemon_json_audit.stat.gr_name ~
-               ' mode=' ~ daemon_json_audit.stat.mode }}
+            {{ 'File does not exist' if not check_3_15_raw.stat.exists else
+               check_3_15_raw.stat.pw_name ~ ':' ~ check_3_15_raw.stat.gr_name }}
 
-    - name: 3.1.2 Append result
+    - name: "3.15 | Append result"
       set_fact:
-        audit_results: "{{ audit_results + [check_3_1_2] }}"
+        audit_results: "{{ audit_results + [check_3_15] }}"
 
-    - name: 3.1.3 Audit docker.service file ownership and permissions
+    # ──────────────────────────────────────────────
+    # 3.16 – daemon.json permissions (644)
+    # ──────────────────────────────────────────────
+    - name: "3.16 | Audit daemon.json permissions"
       ansible.builtin.stat:
-        path: /usr/lib/systemd/system/docker.service
-      register: docker_svc_audit
+        path: /etc/docker/daemon.json
+      register: check_3_16_raw
+      failed_when: false
+      changed_when: false
 
-    - name: 3.1.3 Evaluate Docker Service
+    - name: "3.16 | Evaluate daemon.json permissions"
       set_fact:
-        check_3_1_3:
-          id: "3.1.3"
+        check_3_16:
+          id: "3.16"
           section: "Section 3 - Docker Daemon Configuration Files"
-          title: "Ensure docker.service ownership and permissions are correct"
+          title: "Ensure that daemon.json file permissions are set to 644 or more restrictive"
           status: >-
-            {{ 'SKIP' if not docker_svc_audit.stat.exists else
-               'PASS' if (docker_svc_audit.stat.pw_name == 'root' and
-                         docker_svc_audit.stat.gr_name == 'root' and
-                         docker_svc_audit.stat.mode == '0644') else
+            {{ 'SKIP' if not check_3_16_raw.stat.exists else
+               'PASS' if check_3_16_raw.stat.mode in ['0644', '0600', '0444'] else
                'FAIL' }}
           details: >-
-            {{ 'docker.service does not exist.' if not docker_svc_audit.stat.exists else
-               'docker.service ownership and permissions are correct (root:root 0644).'
-               if (docker_svc_audit.stat.pw_name == 'root' and
-                   docker_svc_audit.stat.gr_name == 'root' and
-                   docker_svc_audit.stat.mode == '0644') else
-               'docker.service check failed. Current: ' ~ docker_svc_audit.stat.pw_name ~ ':' ~
-               docker_svc_audit.stat.gr_name ~ ' ' ~ docker_svc_audit.stat.mode }}
+            {{ 'daemon.json does not exist.' if not check_3_16_raw.stat.exists else
+               'daemon.json permissions are correct (644 or more restrictive).'
+               if check_3_16_raw.stat.mode in ['0644', '0600', '0444'] else
+               'daemon.json permissions are incorrect. Expected 644 or more restrictive. Current: ' ~ check_3_16_raw.stat.mode }}
           remediation: >-
-            chown root:root /usr/lib/systemd/system/docker.service && chmod 644
+            chmod 644 /etc/docker/daemon.json
           raw_output: >-
-            {{ 'File does not exist' if not docker_svc_audit.stat.exists else
-               docker_svc_audit.stat.pw_name ~ ':' ~ docker_svc_audit.stat.gr_name ~
-               ' mode=' ~ docker_svc_audit.stat.mode }}
+            {{ 'File does not exist' if not check_3_16_raw.stat.exists else
+               check_3_16_raw.stat.mode }}
 
-    - name: 3.1.3 Append result
+    - name: "3.16 | Append result"
       set_fact:
-        audit_results: "{{ audit_results + [check_3_1_3] }}"
+        audit_results: "{{ audit_results + [check_3_16] }}"
 
-    - name: 3.1.4 Audit /var/lib/docker ownership and permissions
+    # ──────────────────────────────────────────────
+    # 3.17 – /etc/default/docker ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.17 | Audit /etc/default/docker ownership"
       ansible.builtin.stat:
-        path: /var/lib/docker
-      register: docker_data_dir_audit
+        path: /etc/default/docker
+      register: check_3_17_raw
+      failed_when: false
+      changed_when: false
 
-    - name: 3.1.4 Evaluate Docker Data Directory
+    - name: "3.17 | Evaluate /etc/default/docker ownership"
       set_fact:
-        check_3_1_4:
-          id: "3.1.4"
+        check_3_17:
+          id: "3.17"
           section: "Section 3 - Docker Daemon Configuration Files"
-          title: "Ensure /var/lib/docker ownership and permissions are correct"
+          title: "Ensure that the /etc/default/docker file ownership is set to root:root"
           status: >-
-            {{ 'SKIP' if not docker_data_dir_audit.stat.exists else
-               'PASS' if (docker_data_dir_audit.stat.pw_name == 'root' and
-                         docker_data_dir_audit.stat.gr_name == 'root' and
-                         docker_data_dir_audit.stat.mode == '0710') else
+            {{ 'SKIP' if not check_3_17_raw.stat.exists else
+               'PASS' if (check_3_17_raw.stat.pw_name == 'root' and check_3_17_raw.stat.gr_name == 'root') else
                'FAIL' }}
           details: >-
-            {{ '/var/lib/docker does not exist.' if not docker_data_dir_audit.stat.exists else
-               '/var/lib/docker ownership and permissions are correct (root:root 0710).'
-               if (docker_data_dir_audit.stat.pw_name == 'root' and
-                   docker_data_dir_audit.stat.gr_name == 'root' and
-                   docker_data_dir_audit.stat.mode == '0710') else
-               '/var/lib/docker check failed. Expected 0710, Current: ' ~
-               docker_data_dir_audit.stat.mode }}
+            {{ '/etc/default/docker does not exist.' if not check_3_17_raw.stat.exists else
+               '/etc/default/docker ownership is correct (root:root).'
+               if (check_3_17_raw.stat.pw_name == 'root' and check_3_17_raw.stat.gr_name == 'root') else
+               '/etc/default/docker ownership is incorrect. Current: ' ~ check_3_17_raw.stat.pw_name ~ ':' ~ check_3_17_raw.stat.gr_name }}
           remediation: >-
-            chown root:root /var/lib/docker && chmod 0710 /var/lib/docker
+            chown root:root /etc/default/docker
           raw_output: >-
-            {{ 'Directory does not exist' if not docker_data_dir_audit.stat.exists else
-               docker_data_dir_audit.stat.pw_name ~ ':' ~ docker_data_dir_audit.stat.gr_name ~
-               ' mode=' ~ docker_data_dir_audit.stat.mode }}
+            {{ 'File does not exist' if not check_3_17_raw.stat.exists else
+               check_3_17_raw.stat.pw_name ~ ':' ~ check_3_17_raw.stat.gr_name }}
 
-    - name: 3.1.4 Append result
+    - name: "3.17 | Append result"
       set_fact:
-        audit_results: "{{ audit_results + [check_3_1_4] }}"
+        audit_results: "{{ audit_results + [check_3_17] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.18 – /etc/default/docker permissions (644)
+    # ──────────────────────────────────────────────
+    - name: "3.18 | Audit /etc/default/docker permissions"
+      ansible.builtin.stat:
+        path: /etc/default/docker
+      register: check_3_18_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.18 | Evaluate /etc/default/docker permissions"
+      set_fact:
+        check_3_18:
+          id: "3.18"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the /etc/default/docker file permissions are set to 644 or more restrictively"
+          status: >-
+            {{ 'SKIP' if not check_3_18_raw.stat.exists else
+               'PASS' if check_3_18_raw.stat.mode in ['0644', '0600', '0444'] else
+               'FAIL' }}
+          details: >-
+            {{ '/etc/default/docker does not exist.' if not check_3_18_raw.stat.exists else
+               '/etc/default/docker permissions are correct (644 or more restrictive).'
+               if check_3_18_raw.stat.mode in ['0644', '0600', '0444'] else
+               '/etc/default/docker permissions are incorrect. Expected 644 or more restrictive. Current: ' ~ check_3_18_raw.stat.mode }}
+          remediation: >-
+            chmod 644 /etc/default/docker
+          raw_output: >-
+            {{ 'File does not exist' if not check_3_18_raw.stat.exists else
+               check_3_18_raw.stat.mode }}
+
+    - name: "3.18 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_18] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.19 – /etc/sysconfig/docker permissions (644)
+    # ──────────────────────────────────────────────
+    - name: "3.19 | Audit /etc/sysconfig/docker permissions"
+      ansible.builtin.stat:
+        path: /etc/sysconfig/docker
+      register: check_3_19_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.19 | Evaluate /etc/sysconfig/docker permissions"
+      set_fact:
+        check_3_19:
+          id: "3.19"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the /etc/sysconfig/docker file permissions are set to 644 or more restrictively"
+          status: >-
+            {{ 'SKIP' if not check_3_19_raw.stat.exists else
+               'PASS' if check_3_19_raw.stat.mode in ['0644', '0600', '0444'] else
+               'FAIL' }}
+          details: >-
+            {{ '/etc/sysconfig/docker does not exist.' if not check_3_19_raw.stat.exists else
+               '/etc/sysconfig/docker permissions are correct (644 or more restrictive).'
+               if check_3_19_raw.stat.mode in ['0644', '0600', '0444'] else
+               '/etc/sysconfig/docker permissions are incorrect. Expected 644 or more restrictive. Current: ' ~ check_3_19_raw.stat.mode }}
+          remediation: >-
+            chmod 644 /etc/sysconfig/docker
+          raw_output: >-
+            {{ 'File does not exist' if not check_3_19_raw.stat.exists else
+               check_3_19_raw.stat.mode }}
+
+    - name: "3.19 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_19] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.20 – /etc/sysconfig/docker ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.20 | Audit /etc/sysconfig/docker ownership"
+      ansible.builtin.stat:
+        path: /etc/sysconfig/docker
+      register: check_3_20_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.20 | Evaluate /etc/sysconfig/docker ownership"
+      set_fact:
+        check_3_20:
+          id: "3.20"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the /etc/sysconfig/docker file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if not check_3_20_raw.stat.exists else
+               'PASS' if (check_3_20_raw.stat.pw_name == 'root' and check_3_20_raw.stat.gr_name == 'root') else
+               'FAIL' }}
+          details: >-
+            {{ '/etc/sysconfig/docker does not exist.' if not check_3_20_raw.stat.exists else
+               '/etc/sysconfig/docker ownership is correct (root:root).'
+               if (check_3_20_raw.stat.pw_name == 'root' and check_3_20_raw.stat.gr_name == 'root') else
+               '/etc/sysconfig/docker ownership is incorrect. Current: ' ~ check_3_20_raw.stat.pw_name ~ ':' ~ check_3_20_raw.stat.gr_name }}
+          remediation: >-
+            chown root:root /etc/sysconfig/docker
+          raw_output: >-
+            {{ 'File does not exist' if not check_3_20_raw.stat.exists else
+               check_3_20_raw.stat.pw_name ~ ':' ~ check_3_20_raw.stat.gr_name }}
+
+    - name: "3.20 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_20] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.21 – Containerd socket ownership (root:root)
+    # ──────────────────────────────────────────────
+    - name: "3.21 | Audit containerd socket ownership"
+      ansible.builtin.stat:
+        path: /run/containerd/containerd.sock
+      register: check_3_21_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.21 | Evaluate containerd socket ownership"
+      set_fact:
+        check_3_21:
+          id: "3.21"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the Containerd socket file ownership is set to root:root"
+          status: >-
+            {{ 'SKIP' if not check_3_21_raw.stat.exists else
+               'PASS' if (check_3_21_raw.stat.pw_name == 'root' and check_3_21_raw.stat.gr_name == 'root') else
+               'FAIL' }}
+          details: >-
+            {{ 'containerd socket does not exist.' if not check_3_21_raw.stat.exists else
+               'containerd socket ownership is correct (root:root).'
+               if (check_3_21_raw.stat.pw_name == 'root' and check_3_21_raw.stat.gr_name == 'root') else
+               'containerd socket ownership is incorrect. Current: ' ~ check_3_21_raw.stat.pw_name ~ ':' ~ check_3_21_raw.stat.gr_name }}
+          remediation: >-
+            chown root:root /run/containerd/containerd.sock
+          raw_output: >-
+            {{ 'Socket does not exist' if not check_3_21_raw.stat.exists else
+               check_3_21_raw.stat.pw_name ~ ':' ~ check_3_21_raw.stat.gr_name }}
+
+    - name: "3.21 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_21] }}"
+
+    # ──────────────────────────────────────────────
+    # 3.22 – Containerd socket permissions (660)
+    # ──────────────────────────────────────────────
+    - name: "3.22 | Audit containerd socket permissions"
+      ansible.builtin.stat:
+        path: /run/containerd/containerd.sock
+      register: check_3_22_raw
+      failed_when: false
+      changed_when: false
+
+    - name: "3.22 | Evaluate containerd socket permissions"
+      set_fact:
+        check_3_22:
+          id: "3.22"
+          section: "Section 3 - Docker Daemon Configuration Files"
+          title: "Ensure that the Containerd socket file permissions are set to 660 or more restrictively"
+          status: >-
+            {{ 'SKIP' if not check_3_22_raw.stat.exists else
+               'PASS' if check_3_22_raw.stat.mode in ['0660', '0640', '0600'] else
+               'FAIL' }}
+          details: >-
+            {{ 'containerd socket does not exist.' if not check_3_22_raw.stat.exists else
+               'containerd socket permissions are correct (660 or more restrictive).'
+               if check_3_22_raw.stat.mode in ['0660', '0640', '0600'] else
+               'containerd socket permissions are incorrect. Expected 660 or more restrictive. Current: ' ~ check_3_22_raw.stat.mode }}
+          remediation: >-
+            chmod 660 /run/containerd/containerd.sock
+          raw_output: >-
+            {{ 'Socket does not exist' if not check_3_22_raw.stat.exists else
+               check_3_22_raw.stat.mode }}
+
+    - name: "3.22 | Append result"
+      set_fact:
+        audit_results: "{{ audit_results + [check_3_22] }}"
 
     # ──────────────────────────────────────────────
     # Summary counts
@@ -323,15 +1383,18 @@
         summary_info:  "{{ audit_results | selectattr('status', 'equalto', 'INFO') | list | length }}"
         summary_total: "{{ audit_results | length }}"
 
-    # ──────────────────────────────────────────────
-    # Write audit data to JSON file on target
-    # ──────────────────────────────────────────────
+    # ══════════════════════════════════════════════
+    # KEY FIX: write ALL audit data to a JSON file.
+    # The Python script reads this file directly —
+    # no data is ever interpolated into Python source.
+    # This sidesteps every quoting / escaping issue.
+    # ══════════════════════════════════════════════
     - name: Write audit data to JSON file on target
       copy:
         dest: "{{ data_file }}"
         mode: '0600'
         content: "{{ {'meta': {'host': ansible_hostname,
-                               'docker_ver': ansible_distribution ~ ' ' ~ ansible_distribution_version,
+                               'docker_ver': docker_version.stdout | default('unknown'),
                                'os': ansible_distribution ~ ' ' ~ ansible_distribution_version,
                                'generated': ansible_date_time.iso8601,
                                'pass': summary_pass | int,
@@ -364,7 +1427,6 @@
           META          = payload["meta"]
           AUDIT_RESULTS = payload["results"]
 
-          # ── Palette ──────────────────────────────────────────────────────
           P = dict(
               TITLE_BG="0F3460", HEADER_BG="1F2D3D", HEADER_FG="FFFFFF",
               PASS_BG="D6F4DC",  PASS_FG="1A6E2E",
@@ -394,11 +1456,9 @@
               return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
           def safe(v):
-              """Convert any non-Excel-primitive to a string."""
               return v if isinstance(v, (str, int, float, bool, type(None))) else json.dumps(v)
 
           wb = Workbook()
-
           # ════════════════════════════════════════════════════════════════
           # Sheet 1 – SUMMARY
           # ════════════════════════════════════════════════════════════════
@@ -421,6 +1481,7 @@
           ws.merge_cells("B3:J3")
           c = ws["B3"]
           c.value = (f"Daemon Configuration & Files  |  Host: {META['host']}"
+                     f"  |  Docker: {META['docker_ver']}"
                      f"  |  OS: {META['os']}"
                      f"  |  {META['generated']}")
           c.font      = font(size=9, color="AAAAAA", italic=True)
@@ -453,51 +1514,43 @@
               vc.border = bdr()
           ws.row_dimensions[5].height = 20
           ws.row_dimensions[6].height = 46
-          ws.row_dimensions[7].height = 12
 
-          # Compliance bar
           total = META["total"] or 1
           pct   = round(META["pass"] / total * 100, 1)
           bar   = chr(9608) * int(pct/5) + chr(9617) * (20 - int(pct/5))
           ws.merge_cells("B8:J8")
           bc = ws["B8"]
           bc.value = f"  Compliance:  {bar}  {pct}%  ({META['pass']} / {META['total']} passed)"
-          bc.font  = font(bold=True, size=11,
-                          color=P["PASS_FG"] if pct >= 80 else P["FAIL_FG"])
+          bc.font  = font(bold=True, size=11, color=P["PASS_FG"] if pct >= 80 else P["FAIL_FG"])
           bc.fill  = fill("EAF4EA" if pct >= 80 else "FAE8E8")
           bc.alignment = align("left", "center", wrap=False)
           bc.border = bdr()
           ws.row_dimensions[8].height = 28
-          ws.row_dimensions[9].height = 12
 
-          # Quick results table
           spans = {"B":("B","C"), "D":("D","E"), "F":("F","F"), "G":("G","J")}
           HDR   = 10
-          for col, hdr in zip(["B","D","F","G"],
-                               ["Check ID","Title","Status","Details"]):
+          for col, hdr in zip(["B","D","F","G"], ["Check ID","Title","Status","Details"]):
               c1, c2 = spans[col]
               ws.merge_cells(f"{c1}{HDR}:{c2}{HDR}")
               cell = ws[f"{col}{HDR}"]
-              cell.value     = hdr
-              cell.font      = font(bold=True, size=10, color=P["HEADER_FG"])
-              cell.fill      = fill(P["HEADER_BG"])
+              cell.value = hdr
+              cell.font = font(bold=True, size=10, color=P["HEADER_FG"])
+              cell.fill = fill(P["HEADER_BG"])
               cell.alignment = align("center", "center", wrap=False)
-              cell.border    = bdr()
+              cell.border = bdr()
           ws.row_dimensions[HDR].height = 22
 
           for i, result in enumerate(AUDIT_RESULTS):
               r  = HDR + 1 + i
               bg = "FFFFFF" if i % 2 == 0 else P["ROW_ALT"]
-              sbg, sfg, slabel = STATUS_MAP.get(
-                  result["status"], (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
-              row = {"B": result["id"], "D": result["title"],
-                     "F": slabel,       "G": result["details"]}
+              sbg, sfg, slabel = STATUS_MAP.get(result["status"], (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
+              row = {"B": result["id"], "D": result["title"], "F": slabel, "G": result["details"]}
               for col, val in row.items():
                   c1, c2 = spans[col]
                   ws.merge_cells(f"{c1}{r}:{c2}{r}")
                   cell = ws[f"{col}{r}"]
-                  cell.value     = safe(val)
-                  cell.border    = bdr()
+                  cell.value = safe(val)
+                  cell.border = bdr()
                   cell.alignment = align("center" if col in ("B","F") else "left", "center")
                   if col == "F":
                       cell.font = font(bold=True, color=sfg)
@@ -506,9 +1559,6 @@
                       cell.font = font()
                       cell.fill = fill(bg)
               ws.row_dimensions[r].height = 26
-
-          for col, w in {"B":9,"C":5,"D":28,"E":5,"F":13,"G":28,"H":14,"I":1,"J":1}.items():
-              ws.column_dimensions[col].width = w
 
           # ════════════════════════════════════════════════════════════════
           # Sheet 2 – DETAILED RESULTS
@@ -611,6 +1661,12 @@
         dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section2_3.xlsx"
         flat: true
 
+    - name: Fetch JSON data to controller
+      fetch:
+        src: "{{ data_file }}"
+        dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section2_3.json"
+        flat: true
+
     # ──────────────────────────────────────────────
     # Cleanup temp files from target
     # ──────────────────────────────────────────────
@@ -629,14 +1685,18 @@
       debug:
         msg: |
           ┌──────────────────────────────────────────────────┐
-          │  Docker CIS Benchmark - Sections 2 & 3 Summary  │
-          ├──────────────────────────────────────────────────┤
-          │  TOTAL:  {{ summary_total }}
-          │  PASS:   {{ summary_pass }}
-          │  FAIL:   {{ summary_fail }}
-          │  SKIP:   {{ summary_skip }}
-          │  INFO:   {{ summary_info }}
+          │   Docker CIS Benchmark - Sections 2 & 3 Summary  │
+          ├───────────────┬──────────────────────────────────┤
+          │ Host          │ {{ ansible_hostname }}
+          │ Docker ver    │ {{ docker_version.stdout | default('unknown') }}
+          │ Total checks  │ {{ summary_total }}
+          │ PASS          │ {{ summary_pass }}
+          │ FAIL          │ {{ summary_fail }}
+          │ SKIP          │ {{ summary_skip }}
+          │ INFO          │ {{ summary_info }}
+          │ Excel report  │ {{ report_file }}
           └──────────────────────────────────────────────────┘
-          Excel report: ./docker_benchmark_reports/{{ inventory_hostname }}_section2_3.xlsx
-
-
+          {% for result in audit_results %}
+          [{{ result.status }}] {{ result.id }} - {{ result.title }}
+             {{ result.details }}
+          {% endfor %}
