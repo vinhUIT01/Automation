@@ -1257,13 +1257,13 @@
     - name: "Report | Fetch JSON to controller"
       ansible.builtin.fetch:
         src: "{{ json_file }}"
-        dest: "./cis_reports/{{ inventory_hostname }}_cis_benchmark.json"
+        dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section1.json"
         flat: true
 
     - name: "Report | Fetch Excel to controller"
       ansible.builtin.fetch:
         src: "{{ report_file }}"
-        dest: "./cis_reports/{{ inventory_hostname }}_cis_benchmark.xlsx"
+        dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section1.xlsx"
         flat: true
 
     # ── Step 5: Cleanup temp files ───────────────────────────────────────
@@ -1280,16 +1280,17 @@
       ansible.builtin.debug:
         msg: |
           ┌──────────────────────────────────────────────────────┐
-          │   CIS Docker Benchmark – Audit Summary               │
+          │   CIS Docker Benchmark – Section 1 Audit Summary     │
           ├───────────────┬──────────────────────────────────────┤
           │ Host          │ {{ ansible_hostname }}
           │ Total checks  │ {{ summary_total }}
           │ PASS          │ {{ summary_pass }}
           │ FAIL          │ {{ summary_fail }}
           │ INFO          │ {{ summary_info }}
-          │ Excel report  │ {{ report_file }}
-          │ JSON data     │ {{ json_file }}
           └──────────────────────────────────────────────────────┘
+          Reports saved to:
+            Excel: ./docker_benchmark_reports/{{ inventory_hostname }}_section1.xlsx
+            JSON:  ./docker_benchmark_reports/{{ inventory_hostname }}_section1.json
           {% for r in audit_results %}
           [{{ r.status }}] {{ r.id }} - {{ r.title }}
           {% endfor %}

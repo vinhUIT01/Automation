@@ -1,0 +1,384 @@
+{
+    "meta": {
+        "docker_ver": "29.4.3",
+        "fail": 3,
+        "generated": "2026-05-18T05:37:57Z",
+        "host": "Docker-2204-DA-AUTO",
+        "info": 3,
+        "os": "Ubuntu 22.04",
+        "pass": 25,
+        "skip": 10,
+        "total": 41
+    },
+    "results": [
+        {
+            "details": "Manual check required. Verify if Docker is running as non-root user. Standard Docker installations run as root. Rootless mode requires manual setup.",
+            "id": "2.1",
+            "raw_output": "Manual check - review with: ps -ef | grep dockerd",
+            "remediation": "Consider rootless Docker installation: https://docs.docker.com/engine/security/rootless/",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "INFO",
+            "title": "Run the Docker daemon as a non-root user, if possible"
+        },
+        {
+            "details": "ICC (inter-container communication) is disabled.",
+            "id": "2.2",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Add \"icc\": false to /etc/docker/daemon.json and restart Docker.",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure network traffic is restricted between containers on the default bridge"
+        },
+        {
+            "details": "Logging level is NOT set to info. Default may be too verbose or not verbose enough.",
+            "id": "2.3",
+            "raw_output": "",
+            "remediation": "Add \"log-level\": \"info\" to /etc/docker/daemon.json",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "FAIL",
+            "title": "Ensure the logging level is set to 'info'"
+        },
+        {
+            "details": "Docker is configured to manage iptables.",
+            "id": "2.4",
+            "raw_output": "INFO: Default is true",
+            "remediation": "Add \"iptables\": true to /etc/docker/daemon.json",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure Docker is allowed to make changes to iptables"
+        },
+        {
+            "details": "No insecure registries configured.",
+            "id": "2.5",
+            "raw_output": "PASS",
+            "remediation": "Remove insecure registries from /etc/docker/daemon.json or set to empty array: []",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure insecure registries are not used"
+        },
+        {
+            "details": "Storage driver is overlay2 (not aufs).",
+            "id": "2.6",
+            "raw_output": "overlay2",
+            "remediation": "Change storage driver to overlay2 in /etc/docker/daemon.json: {\"storage-driver\": \"overlay2\"}",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure aufs storage driver is not used"
+        },
+        {
+            "details": "Storage driver is overlay2 (not devicemapper).",
+            "id": "2.7",
+            "raw_output": "overlay2",
+            "remediation": "Change storage driver to overlay2 in /etc/docker/daemon.json: {\"storage-driver\": \"overlay2\"}",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure devicemapper storage driver is not used"
+        },
+        {
+            "details": "TLS authentication is NOT configured. Docker API communications may be unencrypted.",
+            "id": "2.8",
+            "raw_output": "",
+            "remediation": "Configure TLS in /etc/docker/daemon.json with \"tls\": true and \"tlsverify\": true. Ensure CA, server cert, and server key paths are correctly specified.",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "FAIL",
+            "title": "Ensure TLS authentication for Docker daemon is configured"
+        },
+        {
+            "details": "Default ulimits are NOT configured. Containers may exhaust system resources.",
+            "id": "2.9",
+            "raw_output": "",
+            "remediation": "Configure default ulimits in /etc/docker/daemon.json: {\"default-ulimits\": {\"nofile\": {\"Hard\": 64000, \"Name\": \"nofile\", \"Soft\": 64000}}}",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "FAIL",
+            "title": "Ensure the default ulimit is configured appropriately"
+        },
+        {
+            "details": "User namespace remapping is enabled with default profile.",
+            "id": "2.10",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Add \"userns-remap\": \"default\" to /etc/docker/daemon.json and restart Docker. Ensure /etc/subuid and /etc/subgid files exist with dockremap entries.",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Enable user namespace support"
+        },
+        {
+            "details": "Cgroup driver: systemd",
+            "id": "2.11",
+            "raw_output": "systemd",
+            "remediation": "Review cgroup driver configuration. Use cgroupfs or systemd consistently.",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "INFO",
+            "title": "Ensure the default cgroup usage has been confirmed"
+        },
+        {
+            "details": "PASS: No custom base size",
+            "id": "2.12",
+            "raw_output": "PASS: No custom base size",
+            "remediation": "Do not set dm.basesize unless required. Default is sufficient for most use cases.",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure base device size is not changed until needed"
+        },
+        {
+            "details": "Authorization plugins are configured in daemon.json.",
+            "id": "2.13",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Add authorization plugins to /etc/docker/daemon.json: {\"authorization-plugins\": [\"openpolicyagent/opa-docker-authz\"]}",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure that authorization for Docker client commands is enabled"
+        },
+        {
+            "details": "Centralized logging driver is configured.",
+            "id": "2.14",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Configure a centralized logging driver in /etc/docker/daemon.json: {\"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"tcp://192.168.0.42:12345\"}}",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure centralized and remote logging is configured"
+        },
+        {
+            "details": "no-new-privileges is set to true in daemon.json.",
+            "id": "2.15",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Add \"no-new-privileges\": true to /etc/docker/daemon.json",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure containers are restricted from acquiring new privileges"
+        },
+        {
+            "details": "Live restore is enabled. Containers survive Docker daemon restarts.",
+            "id": "2.16",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Add \"live-restore\": true to /etc/docker/daemon.json",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure live restore is enabled"
+        },
+        {
+            "details": "Userland proxy is disabled. Docker uses kernel NAT for better performance.",
+            "id": "2.17",
+            "raw_output": "{\"icc\": false, \"userns-remap\": \"default\", \"log-driver\": \"syslog\", \"log-opts\": {\"syslog-address\": \"udp://127.0.0.1:514\", \"syslog-facility\": \"daemon\", \"tag\": \"docker/{{.Name}}\"}, \"no-new-privileges\": true, \"live-restore\": true, \"userland-proxy\": false, \"authorization-plugins\": [\"opa-docker-authz\"]}",
+            "remediation": "Add \"userland-proxy\": false to /etc/docker/daemon.json",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure Userland Proxy is Disabled"
+        },
+        {
+            "details": "INFO: Using default seccomp profile",
+            "id": "2.18",
+            "raw_output": "INFO: Using default seccomp profile",
+            "remediation": "If custom seccomp is needed, configure in daemon.json: {\"seccomp-profile\": \"/etc/docker/seccomp/profile.json\"}",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "INFO",
+            "title": "Ensure that a daemon-wide custom seccomp profile is applied if appropriate"
+        },
+        {
+            "details": "Experimental features are NOT enabled.",
+            "id": "2.19",
+            "raw_output": "PASS",
+            "remediation": "Remove or set \"experimental\": false in /etc/docker/daemon.json",
+            "section": "Section 2 - Docker Daemon Configuration",
+            "status": "PASS",
+            "title": "Ensure that experimental features are not implemented in production"
+        },
+        {
+            "details": "docker.service ownership is correct (root:root).",
+            "id": "3.1",
+            "raw_output": "['root', AnsibleUndefined(hint=None, obj={'exists': False}, name='pw_name'), 'root']",
+            "remediation": "chown root:root /usr/lib/systemd/system/docker.service",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the docker.service file ownership is set to root:root"
+        },
+        {
+            "details": "docker.service permissions are correct (644 or 444).",
+            "id": "3.2",
+            "raw_output": "['0644', AnsibleUndefined(hint=None, obj={'exists': False}, name='mode'), '0644']",
+            "remediation": "chmod 644 /usr/lib/systemd/system/docker.service",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that docker.service file permissions are appropriately set"
+        },
+        {
+            "details": "docker.socket ownership is correct (root:root).",
+            "id": "3.3",
+            "raw_output": "['root', AnsibleUndefined(hint=None, obj={'exists': False}, name='pw_name'), 'root']",
+            "remediation": "chown root:root /usr/lib/systemd/system/docker.socket",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that docker.socket file ownership is set to root:root"
+        },
+        {
+            "details": "docker.socket permissions are correct (644 or 444).",
+            "id": "3.4",
+            "raw_output": "['0644', AnsibleUndefined(hint=None, obj={'exists': False}, name='mode'), '0644']",
+            "remediation": "chmod 644 /usr/lib/systemd/system/docker.socket",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that docker.socket file permissions are set to 644 or more restrictive"
+        },
+        {
+            "details": "No registry certificates found in /etc/docker/certs.d.",
+            "id": "3.5",
+            "raw_output": "0 certificate(s) found",
+            "remediation": "chown root:root /etc/docker/certs.d/*/*.crt",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that registry certificate file ownership is set to root:root"
+        },
+        {
+            "details": "No registry certificates found.",
+            "id": "3.6",
+            "raw_output": "[]",
+            "remediation": "chmod 444 /etc/docker/certs.d/*/*.crt",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that registry certificate file permissions are set to 444 or more restrictively"
+        },
+        {
+            "details": "No TLS CA certificates found.",
+            "id": "3.7",
+            "raw_output": "0 CA certificate(s) found",
+            "remediation": "chown root:root /etc/docker/ca*.pem",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that TLS CA certificate ownership is set to root:root"
+        },
+        {
+            "details": "No TLS CA certificates found.",
+            "id": "3.8",
+            "raw_output": "[]",
+            "remediation": "chmod 444 /etc/docker/ca*.pem",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that TLS CA certificate permissions are set to 444 or more restrictively"
+        },
+        {
+            "details": "No Docker server certificates found.",
+            "id": "3.9",
+            "raw_output": "0 server certificate(s) found",
+            "remediation": "chown root:root /etc/docker/server*.pem",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that Docker server certificate file ownership is set to root:root"
+        },
+        {
+            "details": "No Docker server certificates found.",
+            "id": "3.10",
+            "raw_output": "[]",
+            "remediation": "chmod 444 /etc/docker/server*.pem",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that Docker server certificate file permissions are set to 444 or more restrictively"
+        },
+        {
+            "details": "No Docker server keys found.",
+            "id": "3.11",
+            "raw_output": "0 server key(s) found",
+            "remediation": "chown root:root /etc/docker/server*.key",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that the Docker server certificate key file ownership is set to root:root"
+        },
+        {
+            "details": "No Docker server keys found.",
+            "id": "3.12",
+            "raw_output": "[]",
+            "remediation": "chmod 400 /etc/docker/server*.key",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that the Docker server certificate key file permissions are set to 400"
+        },
+        {
+            "details": "Docker socket ownership is correct (root:docker).",
+            "id": "3.13",
+            "raw_output": "root:docker",
+            "remediation": "chown root:docker /var/run/docker.sock",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the Docker socket file ownership is set to root:docker"
+        },
+        {
+            "details": "Docker socket permissions are correct (660 or more restrictive).",
+            "id": "3.14",
+            "raw_output": "0660",
+            "remediation": "chmod 660 /var/run/docker.sock",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the Docker socket file permissions are set to 660 or more restrictively"
+        },
+        {
+            "details": "daemon.json ownership is correct (root:root).",
+            "id": "3.15",
+            "raw_output": "root:root",
+            "remediation": "chown root:root /etc/docker/daemon.json",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the daemon.json file ownership is set to root:root"
+        },
+        {
+            "details": "daemon.json permissions are correct (644 or more restrictive).",
+            "id": "3.16",
+            "raw_output": "0644",
+            "remediation": "chmod 644 /etc/docker/daemon.json",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that daemon.json file permissions are set to 644 or more restrictive"
+        },
+        {
+            "details": "/etc/default/docker ownership is correct (root:root).",
+            "id": "3.17",
+            "raw_output": "root:root",
+            "remediation": "chown root:root /etc/default/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the /etc/default/docker file ownership is set to root:root"
+        },
+        {
+            "details": "/etc/default/docker permissions are correct (644 or more restrictive).",
+            "id": "3.18",
+            "raw_output": "0644",
+            "remediation": "chmod 644 /etc/default/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the /etc/default/docker file permissions are set to 644 or more restrictively"
+        },
+        {
+            "details": "/etc/sysconfig/docker does not exist.",
+            "id": "3.19",
+            "raw_output": "File does not exist",
+            "remediation": "chmod 644 /etc/sysconfig/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that the /etc/sysconfig/docker file permissions are set to 644 or more restrictively"
+        },
+        {
+            "details": "/etc/sysconfig/docker does not exist.",
+            "id": "3.20",
+            "raw_output": "File does not exist",
+            "remediation": "chown root:root /etc/sysconfig/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that the /etc/sysconfig/docker file ownership is set to root:root"
+        },
+        {
+            "details": "containerd socket ownership is correct (root:root).",
+            "id": "3.21",
+            "raw_output": "root:root",
+            "remediation": "chown root:root /run/containerd/containerd.sock",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the Containerd socket file ownership is set to root:root"
+        },
+        {
+            "details": "containerd socket permissions are correct (660 or more restrictive).",
+            "id": "3.22",
+            "raw_output": "0660",
+            "remediation": "chmod 660 /run/containerd/containerd.sock",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the Containerd socket file permissions are set to 660 or more restrictively"
+        }
+    ]
+}

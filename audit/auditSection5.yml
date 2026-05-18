@@ -2179,6 +2179,12 @@
         dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section5.xlsx"
         flat: true
 
+    - name: Fetch JSON data to controller
+      fetch:
+        src: "{{ data_file }}"
+        dest: "./docker_benchmark_reports/{{ inventory_hostname }}_section5.json"
+        flat: true
+
     # ──────────────────────────────────────────────
     # Cleanup temp files from target
     # ──────────────────────────────────────────────
@@ -2206,8 +2212,10 @@
           │ FAIL          │ {{ summary_fail }}
           │ SKIP          │ {{ summary_skip }}
           │ INFO          │ {{ summary_info }}
-          │ Excel report  │ {{ report_file }}
           └──────────────────────────────────────────────────┘
+          Reports saved to:
+            Excel: ./docker_benchmark_reports/{{ inventory_hostname }}_section5.xlsx
+            JSON:  ./docker_benchmark_reports/{{ inventory_hostname }}_section5.json
           {% for result in audit_results %}
           [{{ result.status }}] {{ result.id }} - {{ result.title }}
              {{ result.details }}

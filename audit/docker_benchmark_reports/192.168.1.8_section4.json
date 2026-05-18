@@ -1,7 +1,7 @@
 {
     "meta": {
         "fail": 2,
-        "generated": "2026-05-12T09:18:27Z",
+        "generated": "2026-05-18T05:57:40Z",
         "host": "Docker-2204-DA-AUTO",
         "info": 7,
         "os": "Ubuntu 22.04",
@@ -13,7 +13,7 @@
     },
     "results": [
         {
-            "details": "[FAIL] 4.1 - Containers running as root: ae6edb4c514a",
+            "details": "[FAIL] 4.1 - Containers running as root: c7a07d962204",
             "id": "4.1",
             "remediation": "Add a USER instruction to the Dockerfile with a non-root, non-zero UID. Example: RUN groupadd -r appgroup && useradd -r -g appgroup appuser USER appuser",
             "section": "4 - Container Images and Build File",
@@ -53,7 +53,7 @@
             "title": "Ensure Content trust for Docker is Enabled"
         },
         {
-            "details": "[FAIL] 4.6 - Images missing HEALTHCHECK: 1881968aff6f",
+            "details": "[FAIL] 4.6 - Images missing HEALTHCHECK: 6c3a6ea6608c",
             "id": "4.6",
             "remediation": "Add a HEALTHCHECK instruction to every Dockerfile: HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/health || exit 1",
             "section": "4 - Container Images and Build File",

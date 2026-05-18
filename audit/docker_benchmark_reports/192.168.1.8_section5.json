@@ -1,0 +1,294 @@
+{
+    "meta": {
+        "docker_ver": "29.4.3",
+        "fail": 3,
+        "generated": "2026-05-18T05:57:00Z",
+        "host": "Docker-2204-DA-AUTO",
+        "info": 1,
+        "os": "Ubuntu 22.04",
+        "pass": 27,
+        "skip": 0,
+        "total": 31
+    },
+    "results": [
+        {
+            "details": "Swarm mode is not active.",
+            "id": "5.1",
+            "raw_output": "{\"NodeID\":\"\",\"NodeAddr\":\"\",\"LocalNodeState\":\"inactive\",\"ControlAvailable\":false,\"Error\":\"\",\"RemoteManagers\":null}",
+            "remediation": "Run: docker swarm leave --force",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure swarm mode is not enabled, if not needed"
+        },
+        {
+            "details": "All containers have an AppArmor profile assigned.",
+            "id": "5.2",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:AppArmorProfile=docker-default",
+            "remediation": "Add --security-opt apparmor=<profile> when starting containers, or set a default AppArmor profile in /etc/docker/daemon.json.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that, if applicable, an AppArmor Profile is enabled"
+        },
+        {
+            "details": "SELinux is not active on this host (getenforce: Disabled).",
+            "id": "5.3",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:SecurityOpt=[label=level:TopSecret] MountLabel= ProcessLabel=",
+            "remediation": "Use --security-opt label=type:<type> when starting containers, or ensure SELinux is Enforcing on the host and Docker is configured to use it.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "INFO",
+            "title": "Ensure that, if applicable, SELinux security options are set"
+        },
+        {
+            "details": "All containers have acceptable capability configurations.",
+            "id": "5.4",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:CapAdd=<no value> CapDrop=<no value>",
+            "remediation": "Drop all capabilities and add back only what is needed: docker run --cap-drop=ALL --cap-add=<NEEDED_CAP> ... At minimum ensure NET_RAW is dropped if not required.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that Linux kernel capabilities are restricted within containers"
+        },
+        {
+            "details": "No privileged containers detected. All containers return Privileged=false.",
+            "id": "5.5",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Privileged=false",
+            "remediation": "Remove the --privileged flag from docker run commands. Use specific --cap-add flags for the exact capabilities needed instead.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that privileged containers are not used"
+        },
+        {
+            "details": "No sensitive mounts detected.",
+            "id": "5.6",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Volumes=[]",
+            "remediation": "Remove mounts of sensitive host directories (/, /etc, /proc, /sys, /dev etc.). Where mounts are needed, use read-only mode: -v /host/path:/container/path:ro",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure sensitive host system directories are not mounted on containers"
+        },
+        {
+            "details": "No sshd process found in any running container.",
+            "id": "5.7",
+            "raw_output": "OCI runtime exec failed: exec failed: unable to start container process: exec: \"ps\": executable file not found in $PATH",
+            "remediation": "Remove sshd from container images. Use docker exec to get shell access: docker exec -it <container_id> /bin/sh Or use docker attach for foreground containers.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure sshd is not run within containers"
+        },
+        {
+            "details": "No containers are publishing ports on all interfaces.",
+            "id": "5.9",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Exposed={\"80/tcp\":{}} Published={\"80/tcp\":[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"8080\"}]}",
+            "remediation": "Bind published ports to a specific host IP instead of 0.0.0.0. Use -p 127.0.0.1:<host_port>:<container_port> for internal-only services. Remove EXPOSE directives from Dockerfiles for ports not required at runtime.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that only needed ports are open on the container"
+        },
+        {
+            "details": "No containers are using --network=host.",
+            "id": "5.10",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:NetworkMode=secure-net",
+            "remediation": "Remove --network=host from docker run commands. Use Docker bridge or overlay networks and publish only the specific ports required with -p <host_port>:<container_port>.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the host's network namespace is not shared"
+        },
+        {
+            "details": "All containers have a memory limit configured.",
+            "id": "5.11",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Memory=268435456",
+            "remediation": "Set a memory limit when starting containers: docker run --memory=<limit> (e.g. --memory=512m) Or set default memory limits in /etc/docker/daemon.json under \"default-ulimits\".",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the memory usage for containers is limited"
+        },
+        {
+            "details": "All containers have explicit CPU shares configured.",
+            "id": "5.12",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:CpuShares=512",
+            "remediation": "Set CPU shares relative to other containers using: docker run --cpu-shares=<value> Default is 1024. Lower values get less CPU time under contention. Consider also --cpus= to set a hard CPU quota.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that CPU priority is set appropriately on containers"
+        },
+        {
+            "details": "All containers have a read-only root filesystem.",
+            "id": "5.13",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:ReadonlyRootfs=true",
+            "remediation": "Start containers with --read-only flag: docker run --read-only ... Mount writable paths explicitly as volumes: docker run --read-only -v /tmp:/tmp:rw ...",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the container's root filesystem is mounted as read only"
+        },
+        {
+            "details": "All container port bindings are tied to a specific host interface.",
+            "id": "5.14",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Ports={\"80/tcp\":[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"8080\"}]}",
+            "remediation": "Bind ports to a specific host IP: docker run -p 192.168.1.10:80:80 ...   # specific external NIC docker run -p 127.0.0.1:8080:80 ...    # localhost only Avoid -p 0.0.0.0:<port>:<port> or shorthand -p <port>:<port>.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that incoming container traffic is bound to a specific host interface"
+        },
+        {
+            "details": "Containers without correct restart policy (on-failure, max 5): c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:RestartPolicy=unless-stopped MaxRetry=0",
+            "id": "5.15",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:RestartPolicy=unless-stopped MaxRetry=0",
+            "remediation": "Set the restart policy when starting containers: docker run --restart=on-failure:5 ... For existing containers: docker update --restart=on-failure:5 <container_id>",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "FAIL",
+            "title": "Ensure that the on-failure container restart policy is set to 5"
+        },
+        {
+            "details": "No containers are sharing the host PID namespace.",
+            "id": "5.16",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:PidMode=",
+            "remediation": "Remove --pid=host from docker run commands. Containers should use their own isolated PID namespace (the default).",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the host's process namespace is not shared"
+        },
+        {
+            "details": "No containers are sharing the host IPC namespace.",
+            "id": "5.17",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:IpcMode=private",
+            "remediation": "Remove --ipc=host from docker run commands. If two containers need shared memory, use --ipc=container:<name> to share only between those containers, not with the host.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the host's IPC namespace is not shared"
+        },
+        {
+            "details": "No containers have host devices directly exposed.",
+            "id": "5.18",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Devices=null",
+            "remediation": "Remove --device flags unless absolutely required. If a device is needed, restrict permissions to the minimum: docker run --device=/dev/snd:/dev/snd:r  (read-only) Never pass --device=/dev without a specific path.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that host devices are not directly exposed to containers"
+        },
+        {
+            "details": "All containers have explicit ulimit overrides configured.",
+            "id": "5.19",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Ulimits=[{\"Hard\":1024,\"Name\":\"nofile\",\"Soft\":1024}]",
+            "remediation": "Set per-container ulimits at runtime: docker run --ulimit nofile=1024:1024 --ulimit nproc=100 ... Or configure daemon-wide defaults in /etc/docker/daemon.json: { \"default-ulimits\": { \"nofile\": { \"Name\": \"nofile\", \"Hard\": 64000, \"Soft\": 64000 } } }",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the default ulimit is overwritten at runtime if needed"
+        },
+        {
+            "details": "No containers are using shared mount propagation.",
+            "id": "5.20",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Mounts=[]",
+            "remediation": "Change mount propagation from shared to private or slave: docker run -v /host/path:/container/path:slave ... Remove :shared from any -v bind mount options.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure mount propagation mode is not set to shared"
+        },
+        {
+            "details": "No containers are sharing the host UTS namespace.",
+            "id": "5.21",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:UTSMode=",
+            "remediation": "Remove --uts=host from docker run commands. Containers should use their own isolated UTS namespace (the default).",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the host's UTS namespace is not shared"
+        },
+        {
+            "details": "All containers are using the default seccomp profile.",
+            "id": "5.22",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:SecurityOpt=[\"label=level:TopSecret\"]",
+            "remediation": "Remove --security-opt seccomp=unconfined from docker run commands. The Docker default seccomp profile blocks ~44 dangerous syscalls automatically. If a custom profile is needed: --security-opt seccomp=/path/to/profile.json",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure the default seccomp profile is not disabled"
+        },
+        {
+            "details": "No docker exec --privileged usage found in daemon logs (last 7 days).",
+            "id": "5.23",
+            "raw_output": "",
+            "remediation": "Never use: docker exec --privileged <container> <command> Use specific capabilities if elevated access is required in a running container. Audit all docker exec usage via centralized logging.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that docker exec commands are not used with the privileged option"
+        },
+        {
+            "details": "No docker exec --user=root usage found in daemon logs (last 7 days).",
+            "id": "5.24",
+            "raw_output": "",
+            "remediation": "Never use: docker exec --user=root <container> <command> Containers should run as a non-root user defined in the Dockerfile with USER directive. Use docker exec as that non-root user instead.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that docker exec commands are not used with the user=root option"
+        },
+        {
+            "details": "All containers are using the default cgroup hierarchy.",
+            "id": "5.25",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:CgroupParent=",
+            "remediation": "Only use --cgroup-parent if required by your orchestrator. Confirm that custom cgroup parents still have resource limits enforced. Remove --cgroup-parent from containers where it was set unintentionally.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that cgroup usage is confirmed"
+        },
+        {
+            "details": "Containers missing no-new-privileges: c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3",
+            "id": "5.26",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:SecurityOpt=[\"label=level:TopSecret\"]",
+            "remediation": "Add --security-opt=no-new-privileges to all docker run commands. This prevents setuid/setgid programs from escalating privileges inside the container.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "FAIL",
+            "title": "Ensure that the container is restricted from acquiring additional privileges"
+        },
+        {
+            "details": "All containers have a health check configured.",
+            "id": "5.27",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Health=unhealthy",
+            "remediation": "Add a HEALTHCHECK instruction to your Dockerfile: HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/ || exit 1 Or pass at runtime: docker run --health-cmd=\"...\" --health-interval=30s ...",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that container health is checked at runtime"
+        },
+        {
+            "details": "Containers using latest tag or untagged image: c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Image=nginx:latest",
+            "id": "5.28",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Image=nginx:latest",
+            "remediation": "Always pin images to a specific version tag or SHA digest: image: nginx:1.25.3   (version tag) image: nginx@sha256:abc123...  (digest \u2014 most secure) Avoid: image: nginx  or  image: nginx:latest",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "FAIL",
+            "title": "Ensure that Docker commands always make use of the latest version of their image"
+        },
+        {
+            "details": "All containers have a PIDs cgroup limit configured.",
+            "id": "5.29",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:PidsLimit=100",
+            "remediation": "Set a PID limit when starting containers: docker run --pids-limit=100 ... Choose a value appropriate to the expected workload. Even a high value (e.g. 1000) provides fork bomb protection.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the PIDs cgroup limit is used"
+        },
+        {
+            "details": "No containers are using the default docker0 bridge.",
+            "id": "5.30",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Networks={\"secure-net\":{\"Aliases\":null,\"DNSNames\":[\"my_container\",\"c7a07d962204\"],\"DriverOpts\":null,\"EndpointID\":\"c68bb358dda7d2e61743b54d80d397da87c3f0790cc68594b0119594fa5c575d\",\"Gateway\":\"172.18.0.1\",\"GlobalIPv6Address\":\"\",\"GlobalIPv6PrefixLen\":0,\"GwPriority\":0,\"IPAMConfig\":null,\"IPAddress\":\"172.18.0.2\",\"IPPrefixLen\":16,\"IPv6Gateway\":\"\",\"Links\":null,\"MacAddress\":\"02:5b:8a:bd:dc:0d\",\"NetworkID\":\"89cca936b62f5f456209577aa4aae8c9dd3e1c95257b099a1678ba6b87502d9b\"}}",
+            "remediation": "Create user-defined bridge networks and connect containers to them: docker network create my-app-network docker run --network=my-app-network ... This provides container DNS resolution and proper network isolation.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that Docker's default bridge docker0 is not used"
+        },
+        {
+            "details": "No containers are sharing the host user namespace.",
+            "id": "5.31",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:UsernsMode=",
+            "remediation": "Remove --userns=host from docker run commands. Enable user namespace remapping in daemon.json for full UID isolation: { \"userns-remap\": \"default\" }",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the host's user namespaces are not shared"
+        },
+        {
+            "details": "No containers have the Docker socket mounted.",
+            "id": "5.32",
+            "raw_output": "c7a07d962204f0cb5b6f89a3c6813757704c8c80434155e55634ef875b575ca3:Mounts=[]",
+            "remediation": "Remove -v /var/run/docker.sock:/var/run/docker.sock from all docker run commands. If the container needs to manage Docker (e.g. CI agents), use the Docker TCP API with TLS authentication instead, or use purpose-built tools (Kaniko, Buildah) that do not require socket access.",
+            "section": "Section 5 - Container Runtime Security",
+            "status": "PASS",
+            "title": "Ensure that the Docker socket is not mounted inside any containers"
+        }
+    ]
+}
