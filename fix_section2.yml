@@ -39,41 +39,41 @@
           - requests
         state: present
 
-    # ---------------------------------------------------------------
-    # 2.12 – OPA Docker authorization plugin
-    # ---------------------------------------------------------------
-    - name: "2.12 | Install OPA Docker authz plugin"
-      community.docker.docker_plugin:
-        plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
-        state: present
-        alias: opa-docker-authz
+    # # ---------------------------------------------------------------
+    # # 2.12 – OPA Docker authorization plugin
+    # # ---------------------------------------------------------------
+    # - name: "2.12 | Install OPA Docker authz plugin"
+    #   community.docker.docker_plugin:
+    #     plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
+    #     state: present
+    #     alias: opa-docker-authz
 
-    - name: "2.12 | Enable OPA Docker authz plugin"
-      community.docker.docker_plugin:
-        plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
-        state: enable
-        alias: opa-docker-authz
+    # - name: "2.12 | Enable OPA Docker authz plugin"
+    #   community.docker.docker_plugin:
+    #     plugin_name: openpolicyagent/opa-docker-authz-v2:0.9
+    #     state: enable
+    #     alias: opa-docker-authz
 
-    - name: "2.12 | Create OPA policy directory"
-      ansible.builtin.file:
-        path: /etc/docker/policies
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
+    # - name: "2.12 | Create OPA policy directory"
+    #   ansible.builtin.file:
+    #     path: /etc/docker/policies
+    #     state: directory
+    #     owner: root
+    #     group: root
+    #     mode: '0755'
 
-    - name: "2.12 | Deploy allow-all OPA policy (thay bằng policy chặt hơn nếu cần)"
-      ansible.builtin.copy:
-        dest: /etc/docker/policies/authz.rego
-        owner: root
-        group: root
-        mode: '0644'
-        content: |
-          package docker.authz
+    # - name: "2.12 | Deploy allow-all OPA policy (thay bằng policy chặt hơn nếu cần)"
+    #   ansible.builtin.copy:
+    #     dest: /etc/docker/policies/authz.rego
+    #     owner: root
+    #     group: root
+    #     mode: '0644'
+    #     content: |
+    #       package docker.authz
 
-          allow {
-            true
-          }
+    #       allow {
+    #         true
+    #       }
 
     # ---------------------------------------------------------------
     # 2.13 – Centralized logging với rsyslog
