@@ -322,17 +322,18 @@
   "templating": {
     "list": [
       {
-        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "current": { "selected": true, "text": "All", "value": "$__all" },
         "datasource": { "type": "prometheus", "uid": "prometheus" },
         "definition": "label_values(cis_docker_summary, instance)",
         "hide": 0,
         "includeAll": true,
+        "allValue": ".*",
         "label": "Host",
         "multi": true,
         "name": "host",
         "options": [],
         "query": { "query": "label_values(cis_docker_summary, instance)", "refId": "StandardVariableQuery" },
-        "refresh": 2,
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
