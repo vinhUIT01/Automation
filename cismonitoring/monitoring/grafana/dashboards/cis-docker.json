@@ -1,0 +1,350 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "yellow", "value": 80 },
+              { "color": "green", "value": 95 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "avg(cis_docker_compliance_percent{instance=~\"$host\"})",
+          "legendFormat": "Compliance",
+          "refId": "A"
+        }
+      ],
+      "title": "Overall Compliance %",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(cis_docker_summary{instance=~\"$host\",outcome=\"total\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Checks",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "mappings": []
+        }
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 10, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(cis_docker_summary{instance=~\"$host\",outcome=\"pass\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "PASS",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "mappings": []
+        }
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 14, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(cis_docker_summary{instance=~\"$host\",outcome=\"fail\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "FAIL",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "mappings": []
+        }
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 18, "y": 0 },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(cis_docker_summary{instance=~\"$host\",outcome=\"info\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "INFO",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "cis_docker_compliance_percent{instance=~\"$host\"}",
+          "legendFormat": "{{instance}} / {{section}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Compliance % over time (per host / section)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false }
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+      "id": 7,
+      "options": {
+        "displayLabels": ["name", "value"],
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "values": ["value"] },
+        "pieType": "pie",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (outcome) (cis_docker_summary{instance=~\"$host\",outcome=~\"pass|fail|info|warn|skip\"})",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Outcome distribution",
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "FAIL": { "color": "red", "index": 0, "text": "FAIL" } } }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 15 },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "cis_docker_check{instance=~\"$host\",status=\"FAIL\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failing checks",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "__name__": true,
+              "Time": true,
+              "Value": true,
+              "job": true,
+              "exported_job": true,
+              "monitor": true
+            },
+            "indexByName": {
+              "instance": 0,
+              "section": 1,
+              "id": 2,
+              "sub_section": 3,
+              "title": 4,
+              "status": 5
+            },
+            "renameByName": {
+              "instance": "Host",
+              "section": "Section",
+              "id": "Check ID",
+              "sub_section": "Sub-section",
+              "title": "Title",
+              "status": "Status"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["cis", "docker", "security"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(cis_docker_summary, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "host",
+        "options": [],
+        "query": { "query": "label_values(cis_docker_summary, instance)", "refId": "StandardVariableQuery" },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "CIS Docker Benchmark",
+  "uid": "cis-docker-benchmark",
+  "version": 1,
+  "weekStart": ""
+}

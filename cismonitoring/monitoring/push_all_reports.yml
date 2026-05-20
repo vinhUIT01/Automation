@@ -1,0 +1,39 @@
+---
+# Push every existing JSON report under audit/docker_benchmark_reports/
+# to the Pushgateway. Useful for back-filling after bringing the
+# monitoring stack up, or for re-running pushes without re-auditing.
+#
+# Run: ansible-playbook monitoring/push_all_reports.yml
+#      (optionally: -e pushgateway_url=http://other-host:9091)
+
+- name: Push all CIS Docker audit JSON reports to Pushgateway
+  hosts: localhost
+  gather_facts: false
+  vars:
+    reports_dir: "{{ playbook_dir }}/../audit/docker_benchmark_reports"
+    pushgateway_url: "http://localhost:9091"
+  tasks:
+    - name: Find report JSON files
+      ansible.builtin.find:
+        paths: "{{ reports_dir }}"
+        patterns: "*_section*.json"
+        file_type: file
+      register: report_files
+
+    - name: Fail if no reports found
+      ansible.builtin.fail:
+        msg: "No *_section*.json reports found in {{ reports_dir }}"
+      when: report_files.files | length == 0
+
+    - name: Push each report
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/scripts/push_metrics.py
+          --json {{ item.path | quote }}
+          --host {{ (item.path | basename | regex_replace('_section.*\\.json$', '')) | quote }}
+          --section {{ ('section' + (item.path | basename | regex_replace('^.*_section', '') | regex_replace('\\.json$', ''))) | quote }}
+          --pushgateway {{ pushgateway_url | quote }}
+      loop: "{{ report_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      changed_when: false

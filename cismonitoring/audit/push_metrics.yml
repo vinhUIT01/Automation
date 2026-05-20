@@ -1,0 +1,32 @@
+---
+# Reusable task file. Include from any auditSection*.y*ml after the
+# JSON report has been fetched back to the controller.
+#
+# Required vars:
+#   section_name  -> e.g. "section1", "section2_3", "section4"
+#   json_local    -> path on controller, e.g.
+#                    "./docker_benchmark_reports/{{ inventory_hostname }}_section1.json"
+#
+# Optional vars (override via -e or group_vars):
+#   pushgateway_url   default http://localhost:9091
+#   push_metrics_skip default false  (set true to skip push entirely)
+
+- name: "Pushgateway | Push CIS metrics for {{ inventory_hostname }} / {{ section_name }}"
+  ansible.builtin.command:
+    cmd: >-
+      python3 {{ playbook_dir }}/../monitoring/scripts/push_metrics.py
+      --json {{ json_local | quote }}
+      --host {{ inventory_hostname | quote }}
+      --section {{ section_name | quote }}
+      --pushgateway {{ pushgateway_url | default('http://localhost:9091') | quote }}
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  failed_when: false
+  register: pushgateway_result
+  when: not (push_metrics_skip | default(false) | bool)
+
+- name: "Pushgateway | Result"
+  ansible.builtin.debug:
+    msg: "{{ pushgateway_result.stdout | default('skipped') }}"
+  when: not (push_metrics_skip | default(false) | bool)
