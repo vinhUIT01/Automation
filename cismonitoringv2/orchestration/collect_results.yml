@@ -1,0 +1,53 @@
+---
+# Standalone "evidence collection" pass – useful when audit was already
+# run separately (e.g. via the legacy audit/auditSection*.yaml playbooks)
+# and you only want to (re)build the Evidence Store + reports.
+#
+# Steps:
+#   1. Sweep audit/docker_benchmark_reports/ for *_section*.json
+#   2. Normalize each record and insert into the SQLite Evidence Store
+#   3. Generate aggregated HTML report (PDF optional with -e report_pdf=true)
+#
+# Run:
+#   ansible-playbook cismonitoringv2/orchestration/collect_results.yml
+
+- name: Evidence collection & reporting
+  hosts: localhost
+  gather_facts: false
+  vars:
+    reports_dir: "{{ playbook_dir }}/../../audit/docker_benchmark_reports"
+    evidence_store: "{{ playbook_dir }}/../evidence_pipeline/store/evidence.sqlite"
+    report_output_dir: "{{ playbook_dir }}/../reporting/output"
+  tasks:
+    - name: "Evidence | Ensure store directory exists"
+      ansible.builtin.file:
+        path: "{{ evidence_store | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Evidence | Run collector + normalizer"
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../evidence_pipeline/evidence_collector.py
+          --reports-dir {{ reports_dir }}
+          --store {{ evidence_store }}
+      changed_when: false
+      register: collector_result
+
+    - name: "Evidence | Collector output"
+      ansible.builtin.debug:
+        msg: "{{ collector_result.stdout_lines }}"
+
+    - name: "Reporting | Generate HTML (and PDF if requested)"
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../reporting/generate_report.py
+          --store {{ evidence_store }}
+          --output-dir {{ report_output_dir }}
+          {{ '--pdf' if (report_pdf | default(false) | bool) else '' }}
+      changed_when: false
+      register: report_result
+
+    - name: "Reporting | Output paths"
+      ansible.builtin.debug:
+        msg: "{{ report_result.stdout_lines }}"

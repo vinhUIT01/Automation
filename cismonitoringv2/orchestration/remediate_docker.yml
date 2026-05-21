@@ -1,0 +1,30 @@
+---
+# Master remediation orchestrator – runs every existing remediation
+# playbook in sequence. Each section is delegated to the legacy file
+# under Remediation/ so the source-of-truth logic stays unchanged.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts \
+#     cismonitoringv2/orchestration/remediate_docker.yml
+#
+# Skip a section by overriding the corresponding flag, e.g.:
+#   -e remediate_section3=false
+#
+# After remediation a fresh audit pass is recommended:
+#   ansible-playbook -i inventory/hosts \
+#     cismonitoringv2/orchestration/audit_docker.yml
+
+- name: "Remediation | Section 1"
+  ansible.builtin.import_playbook: ../../Remediation/Remediation_Section1.yaml
+
+- name: "Remediation | Section 2"
+  ansible.builtin.import_playbook: ../../Remediation/Remediation_Section2.yml
+
+- name: "Remediation | Section 3"
+  ansible.builtin.import_playbook: ../../Remediation/Remediation_Section3.yml
+
+- name: "Remediation | Section 4"
+  ansible.builtin.import_playbook: ../../Remediation/Remediation_Section4.yml
+
+- name: "Remediation | Section 5"
+  ansible.builtin.import_playbook: ../../Remediation/Remediation_Section5.yml

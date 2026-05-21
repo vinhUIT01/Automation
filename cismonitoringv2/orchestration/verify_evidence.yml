@@ -1,0 +1,35 @@
+---
+# Integrity verification pass – re-hashes every active run in the
+# Evidence Store and compares the digests against the values captured
+# at ingestion. Each verification appends to ``integrity_checks`` and
+# to the custody journal (chain of custody).
+#
+# Run periodically (e.g. via cron / CI) to enforce the
+# "Integrity & Hashing" audit principle.
+#
+# Usage:
+#   ansible-playbook cismonitoringv2/orchestration/verify_evidence.yml
+
+- name: Evidence integrity verification
+  hosts: localhost
+  gather_facts: false
+  vars:
+    evidence_store: "{{ playbook_dir }}/../evidence_pipeline/store/evidence.sqlite"
+  tasks:
+    - name: "Integrity | Run verifier"
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../evidence_pipeline/verify_evidence.py
+          --store {{ evidence_store }}
+      changed_when: false
+      register: verify_result
+      failed_when: verify_result.rc not in [0, 1]
+
+    - name: "Integrity | Output"
+      ansible.builtin.debug:
+        msg: "{{ verify_result.stdout_lines }}"
+
+    - name: "Integrity | Fail run on tamper / missing source"
+      ansible.builtin.fail:
+        msg: "One or more integrity checks failed – see custody log."
+      when: verify_result.rc == 1

@@ -1,0 +1,22 @@
+---
+# Example Ansible Vault file holding sensitive variables that should NOT
+# live in plain text. Encrypt before committing:
+#
+#   ansible-vault encrypt cismonitoringv2/security/vault.yml
+#
+# Reference it in a playbook run:
+#
+#   ansible-playbook -i inventory/hosts \
+#       cismonitoringv2/orchestration/audit_docker.yml \
+#       -e @cismonitoringv2/security/vault.yml --ask-vault-pass
+#
+# Variables read by the existing playbooks:
+#   ansible_become_password   sudo password for target docker hosts
+#   ansible_ssh_pass          SSH password (if not using keys)
+#   pushgateway_url           override default Pushgateway URL
+#   grafana_admin_password    bootstrap password for Grafana admin
+
+ansible_become_password: "CHANGE_ME"
+ansible_ssh_pass: "CHANGE_ME"
+pushgateway_url: "http://localhost:9091"
+grafana_admin_password: "CHANGE_ME"
