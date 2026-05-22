@@ -1,0 +1,68 @@
+---
+# Master audit orchestrator – runs every CIS Docker section playbook in
+# sequence and (optionally) pushes metrics + collects evidence afterwards.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts cismonitoringv2/orchestration/audit_docker.yml
+#
+# Extra-vars:
+#   -e push_metrics_skip=true     skip Pushgateway push step
+#   -e collect_skip=true          skip evidence pipeline step
+#   -e pushgateway_url=http://host:9091
+#
+# This playbook does not duplicate any audit logic – it imports the
+# existing playbooks under audit/ so the source of truth stays the same.
+
+- name: "Orchestration | Section 1"
+  ansible.builtin.import_playbook: ../../audit/auditSection1.yaml
+
+- name: "Orchestration | Section 2 & 3"
+  ansible.builtin.import_playbook: ../../audit/auditSection2_3.yml
+
+- name: "Orchestration | Section 4"
+  ansible.builtin.import_playbook: ../../audit/auditSection4.yml
+
+- name: "Orchestration | Section 5"
+  ansible.builtin.import_playbook: ../../audit/auditSection5.yml
+
+- name: "Orchestration | Section 6"
+  ansible.builtin.import_playbook: ../../audit/auditSection6.yaml
+
+- name: "Orchestration | Push all metrics to Pushgateway"
+  ansible.builtin.import_playbook: ../monitoring/push_all_reports.yml
+
+- name: "Orchestration | Evidence pipeline + reporting"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    reports_dir: "{{ playbook_dir }}/../../audit/docker_benchmark_reports"
+    evidence_store: "{{ playbook_dir }}/../evidence_pipeline/store/evidence.sqlite"
+    report_output_dir: "{{ playbook_dir }}/../reporting/output"
+  tasks:
+    - name: "Evidence | Collect + normalize + store"
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../evidence_pipeline/evidence_collector.py
+          --reports-dir {{ reports_dir }}
+          --store {{ evidence_store }}
+      changed_when: false
+      when: not (collect_skip | default(false) | bool)
+
+    - name: "Integrity | Verify hashes (post-ingest)"
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../evidence_pipeline/verify_evidence.py
+          --store {{ evidence_store }}
+      changed_when: false
+      failed_when: false
+      when: not (verify_skip | default(false) | bool)
+
+    - name: "Reporting | Generate HTML / PDF report"
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../reporting/generate_report.py
+          --store {{ evidence_store }}
+          --output-dir {{ report_output_dir }}
+          {{ '--pdf' if (report_pdf | default(false) | bool) else '' }}
+      changed_when: false
+      when: not (report_skip | default(false) | bool)

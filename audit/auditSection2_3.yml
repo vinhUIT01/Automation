@@ -1543,8 +1543,8 @@
           for i, result in enumerate(AUDIT_RESULTS):
               r  = HDR + 1 + i
               bg = "FFFFFF" if i % 2 == 0 else P["ROW_ALT"]
-              sbg, sfg, slabel = STATUS_MAP.get(result["status"], (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
-              row = {"B": result["id"], "D": result["title"], "F": slabel, "G": result["details"]}
+              sbg, sfg, slabel = STATUS_MAP.get(result.get("status", ""), (P["SKIP_BG"], P["SKIP_FG"], result.get("status", "")))
+              row = {"B": result.get("id", ""), "D": result.get("title", ""), "F": slabel, "G": result.get("details", "")}
               for col, val in row.items():
                   c1, c2 = spans[col]
                   ws.merge_cells(f"{c1}{r}:{c2}{r}")
@@ -1586,12 +1586,12 @@
               r  = i + 2
               bg = "FFFFFF" if i % 2 == 0 else P["ROW_ALT"]
               sbg, sfg, slabel = STATUS_MAP.get(
-                  result["status"], (P["SKIP_BG"], P["SKIP_FG"], result["status"]))
+                  result.get("status", ""), (P["SKIP_BG"], P["SKIP_FG"], result.get("status", "")))
               det = {
-                  "B": result["id"],          "C": result["section"],
-                  "D": result["title"],       "E": slabel,
-                  "F": result["details"],     "G": result["remediation"],
-                  "H": result["raw_output"],
+                  "B": result.get("id", ""),          "C": result.get("section", ""),
+                  "D": result.get("title", ""),       "E": slabel,
+                  "F": result.get("details", ""),     "G": result.get("remediation", ""),
+                  "H": result.get("raw_output", ""),
               }
               for col, val in det.items():
                   cell = ws2[f"{col}{r}"]

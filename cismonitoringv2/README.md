@@ -31,20 +31,74 @@ audit/docker_benchmark_reports/
 .
 ├── ansible.cfg
 ├── inventory/hosts
-├── audit/                                  # playbook audit + JSON kết quả
+├── audit/                                  # playbook audit + JSON kết quả (giữ nguyên)
 │   ├── auditSection1.yaml ... 6.yaml
-│   ├── docker_benchmark_reports/           # JSON / XLSX fetched về controller
-│   └── push_metrics.yml                    # task file đẩy metric lên Pushgateway
-├── Remediation/                            # playbook remediation
-└── monitoring/
-    ├── docker-compose.yml                  # Prometheus + Pushgateway + Grafana
-    ├── prometheus/prometheus.yml           # scrape config
-    ├── grafana/
-    │   ├── provisioning/                   # tự nối datasource + load dashboard
-    │   └── dashboards/cis-docker.json      # dashboard mặc định
-    ├── scripts/push_metrics.py             # JSON → Prometheus exposition → PUT
-    ├── push_all_reports.yml                # back-fill toàn bộ JSON sẵn có
-    └── README.md
+│   └── docker_benchmark_reports/           # JSON / XLSX fetched về controller
+├── Remediation/                            # playbook remediation (giữ nguyên)
+└── cismonitoringv2/                        # = Compliance-as-Code stack
+    ├── orchestration/                      # [3] master playbooks
+    │   ├── audit_docker.yml                #   chạy toàn bộ audit + pipeline
+    │   ├── collect_results.yml             #   re-build evidence + report
+    │   ├── verify_evidence.yml             #   verify integrity (định kỳ)
+    │   └── remediate_docker.yml            #   chạy toàn bộ remediation
+    ├── audit/
+    │   └── push_metrics.yml                #   task file đẩy metric (cũ)
+    ├── evidence_pipeline/                  # [4] Evidence & Data Pipeline
+    │   ├── normalizer.py                   #   chuẩn hoá schema JSON
+    │   ├── audit_principles.py             #   UUID + SHA-256 + journal helpers
+    │   ├── evidence_collector.py           #   gom → normalize → store + custody
+    │   ├── verify_evidence.py              #   re-hash + log integrity_checks
+    │   └── store/
+    │       ├── evidence.sqlite             #   Evidence Store (versioned, UUID, hash)
+    │       └── journal/custody-YYYYMMDD.jsonl  #   append-only custody journal
+    ├── reporting/                          # [6] Reporting
+    │   ├── generate_report.py              #   HTML (+ PDF tuỳ chọn)
+    │   └── output/cis_report_latest.html
+    ├── monitoring/                         # [5][7] Pushgateway + Prometheus + Grafana
+    │   ├── docker-compose.yml
+    │   ├── prometheus/prometheus.yml
+    │   ├── grafana/...
+    │   ├── scripts/push_metrics.py
+    │   └── push_all_reports.yml
+    └── security/                           # [9] Security & Secrets
+        ├── .env.example
+        ├── vault.example.yml
+        └── README.md
+```
+
+### Sơ đồ ↔ thư mục
+
+| Khối trong sơ đồ                       | Implementation                                      |
+| -------------------------------------- | --------------------------------------------------- |
+| [1] User / Trigger                     | `ansible-playbook …/audit_docker.yml`               |
+| [2] Docker Host                        | hosts trong `inventory/hosts`                       |
+| [3] Orchestration & Scanning (Ansible) | `cismonitoringv2/orchestration/*.yml` + `audit/*`   |
+| [4] Evidence & Data Pipeline           | `cismonitoringv2/evidence_pipeline/`                |
+| [5] Metrics Gateway (Pushgateway)      | `monitoring/docker-compose.yml` (port 9091)         |
+| [6] Reporting (HTML / PDF)             | `cismonitoringv2/reporting/generate_report.py`      |
+| [7] Monitoring & Dashboard             | `monitoring/` (Prometheus 9090, Grafana 3000)       |
+| [8] Remediation (Automated)            | `orchestration/remediate_docker.yml` + `Remediation/` |
+| [9] Security & Secrets                 | `cismonitoringv2/security/`                         |
+
+### Tuân thủ 3 Audit Principles
+
+| Nguyên tắc | Implementation |
+|---|---|
+| **1. Chain of Custody** (Chuỗi hành trình bằng chứng) | Mỗi run được gán UUIDv4 + metadata `ingested_at` (ISO-8601 UTC) + `ingested_by` (user@host, override qua `CIS_AUDIT_ACTOR`) + đường dẫn file gốc. Mọi sự kiện thu thập / verify / supersede ghi vào bảng `custody_log` và file append-only `store/journal/custody-YYYYMMDD.jsonl`. Không bao giờ ghi đè – phiên bản cũ giữ nguyên, gán `superseded_by` trỏ tới run mới. |
+| **2. Integrity & Hashing** (Tính toàn vẹn) | Tại thời điểm ingest tính cả `source_sha256` (hash file JSON gốc) và `record_sha256` (hash canonical-JSON của record đã normalize). `verify_evidence.py` re-hash định kỳ, ghi `integrity_checks` + custody event `VERIFIED` / `INTEGRITY_FAIL`. Phát hiện ngay khi file gốc bị sửa hoặc DB bị tamper. |
+| **3. Traceability** (Khả năng truy vết) | Mỗi run **và** mỗi check đều mang UUID riêng. Run trỏ về file gốc qua cột `source` + `source_sha256` → có thể truy ngược tới bytes nguyên bản. Báo cáo HTML hiển thị UUID + 16 ký tự đầu của hash + ingestion metadata + custody log 200 sự kiện gần nhất. |
+
+Bật / tắt từng bước qua extra-vars:
+
+```bash
+# Skip integrity verify trong audit_docker.yml
+ansible-playbook .../audit_docker.yml -e verify_skip=true
+
+# Chạy verify độc lập (cron / CI)
+ansible-playbook cismonitoringv2/orchestration/verify_evidence.yml
+
+# Pin actor cho CI / scheduler
+CIS_AUDIT_ACTOR=ci@github-runner ansible-playbook .../audit_docker.yml
 ```
 
 ---
@@ -142,21 +196,37 @@ Thêm `--dry-run` để chỉ in metric ra stdout, không push.
 
 ## 6. Quy trình điển hình
 
+### 6.1. Cách cũ (chạy từng section)
+
 ```bash
-# Lần 1: khởi động hệ thống
-cd monitoring && docker compose up -d && cd ..
-
-# Lần 1: back-fill toàn bộ kết quả cũ
-ansible-playbook monitoring/push_all_reports.yml
-
-# Mở Grafana: http://localhost:3000  (admin/admin)
-# → Dashboard "CIS Docker Benchmark" có dữ liệu
-
-# Lần sau: chạy audit như cũ
+cd cismonitoringv2/monitoring && docker compose up -d && cd ../..
+ansible-playbook cismonitoringv2/monitoring/push_all_reports.yml
 ansible-playbook -i inventory/hosts audit/auditSection1.yaml
-# Nếu đã tích hợp 5.2 thì metric tự lên
-# Nếu chưa: chạy lại 5.1 để back-fill
 ```
+
+### 6.2. Cách mới (one-shot end-to-end theo sơ đồ)
+
+```bash
+# Bật monitoring stack 1 lần
+cd cismonitoringv2/monitoring && docker compose up -d && cd ../..
+
+# Chạy TOÀN BỘ pipeline: audit → push metrics → evidence store → HTML report
+ansible-playbook -i inventory/hosts \
+  cismonitoringv2/orchestration/audit_docker.yml
+
+# Nếu chỉ muốn dựng lại Evidence Store + report từ JSON đã có
+ansible-playbook cismonitoringv2/orchestration/collect_results.yml \
+  -e report_pdf=true            # tuỳ chọn: kèm PDF
+
+# Auto-remediate (cẩn thận – thay đổi cấu hình target)
+ansible-playbook -i inventory/hosts \
+  cismonitoringv2/orchestration/remediate_docker.yml
+```
+
+Kết quả sau khi chạy:
+- Pushgateway → Prometheus → Grafana có dữ liệu mới (xem mục 7 dashboard).
+- `cismonitoringv2/evidence_pipeline/store/evidence.sqlite` được cập nhật.
+- `cismonitoringv2/reporting/output/cis_report_latest.html` là báo cáo HTML mới nhất.
 
 ---
 
