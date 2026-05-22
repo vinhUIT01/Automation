@@ -10,7 +10,7 @@
   hosts: localhost
   gather_facts: false
   vars:
-    reports_dir: "{{ playbook_dir }}/../audit/docker_benchmark_reports"
+    reports_dir: "{{ playbook_dir }}/../../audit/docker_benchmark_reports"
     pushgateway_url: "http://localhost:9091"
   tasks:
     - name: Find report JSON files

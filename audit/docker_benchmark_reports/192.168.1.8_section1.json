@@ -1,7 +1,7 @@
 {
     "meta": {
         "fail": 1,
-        "generated": "2026-05-18T05:56:21Z",
+        "generated": "2026-05-21T18:48:40Z",
         "host": "Docker-2204-DA-AUTO",
         "info": 5,
         "os": "Ubuntu 22.04",
@@ -17,7 +17,7 @@
             "title": "Ensure a separate partition for containers has been created"
         },
         {
-            "details": "[INFO] 1.1.2 - Manual review required. Docker group members: docker:x:999:",
+            "details": "[INFO] 1.1.2 - Manual review required. Docker group members: docker:x:999:v1nh2oz4",
             "id": "1.1.2",
             "section": "1.1 Host Configuration",
             "status": "INFO",
