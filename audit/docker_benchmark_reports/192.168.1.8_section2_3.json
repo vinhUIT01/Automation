@@ -1,15 +1,75 @@
 {
     "meta": {
         "docker_ver": "29.5.2",
-        "fail": 3,
-        "generated": "2026-05-21T18:48:38Z",
+        "fail": 5,
+        "generated": "2026-05-28T11:58:06Z",
         "host": "Docker-2204-DA-AUTO",
         "info": 3,
         "os": "Ubuntu 22.04",
-        "pass": 25,
-        "skip": 10,
+        "pass": 29,
+        "skip": 4,
         "total": 41
     },
+        },
+        {
+            "details": "daemon.json permissions are correct (644 or more restrictive).",
+            "id": "3.16",
+            "raw_output": "0644",
+            "remediation": "chmod 644 /etc/docker/daemon.json",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that daemon.json file permissions are set to 644 or more restrictive"
+        },
+        {
+            "details": "/etc/default/docker ownership is correct (root:root).",
+            "id": "3.17",
+            "raw_output": "root:root",
+            "remediation": "chown root:root /etc/default/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the /etc/default/docker file ownership is set to root:root"
+        },
+        {
+            "details": "/etc/default/docker permissions are correct (644 or more restrictive).",
+            "id": "3.18",
+            "raw_output": "0644",
+            "remediation": "chmod 644 /etc/default/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the /etc/default/docker file permissions are set to 644 or more restrictively"
+        },
+        {
+            "details": "/etc/sysconfig/docker does not exist.",
+            "id": "3.19",
+            "raw_output": "File does not exist",
+            "remediation": "chmod 644 /etc/sysconfig/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that the /etc/sysconfig/docker file permissions are set to 644 or more restrictively"
+        },
+        {
+            "details": "/etc/sysconfig/docker does not exist.",
+            "id": "3.20",
+            "raw_output": "File does not exist",
+            "remediation": "chown root:root /etc/sysconfig/docker",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "SKIP",
+            "title": "Ensure that the /etc/sysconfig/docker file ownership is set to root:root"
+        },
+        {
+            "details": "containerd socket ownership is correct (root:root).",
+            "id": "3.21",
+            "raw_output": "root:root",
+            "remediation": "chown root:root /run/containerd/containerd.sock",
+            "section": "Section 3 - Docker Daemon Configuration Files",
+            "status": "PASS",
+            "title": "Ensure that the Containerd socket file ownership is set to root:root"
+        },
+        {
+            "details": "containerd socket permissions are correct (660 or more restrictive).",
+            "id": "3.22",
+            "raw_output": "0660",
+         
     "results": [
         {
             "details": "Manual check required. Verify if Docker is running as non-root user. Standard Docker installations run as root. Rootless mode requires manual setup.",
@@ -237,57 +297,57 @@
             "title": "Ensure that registry certificate file permissions are set to 444 or more restrictively"
         },
         {
-            "details": "No TLS CA certificates found.",
+            "details": "TLS CA certificate ownership is correct (root:root).",
             "id": "3.7",
-            "raw_output": "0 CA certificate(s) found",
+            "raw_output": "2 CA certificate(s) found",
             "remediation": "chown root:root /etc/docker/ca*.pem",
             "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
+            "status": "PASS",
             "title": "Ensure that TLS CA certificate ownership is set to root:root"
         },
         {
-            "details": "No TLS CA certificates found.",
+            "details": "TLS CA certificate permissions are incorrect.",
             "id": "3.8",
-            "raw_output": "[]",
+            "raw_output": "['0444', '0400']",
             "remediation": "chmod 444 /etc/docker/ca*.pem",
             "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
+            "status": "FAIL",
             "title": "Ensure that TLS CA certificate permissions are set to 444 or more restrictively"
         },
         {
-            "details": "No Docker server certificates found.",
+            "details": "Docker server certificate ownership is correct (root:root).",
             "id": "3.9",
-            "raw_output": "0 server certificate(s) found",
+            "raw_output": "2 server certificate(s) found",
             "remediation": "chown root:root /etc/docker/server*.pem",
             "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
+            "status": "PASS",
             "title": "Ensure that Docker server certificate file ownership is set to root:root"
         },
         {
-            "details": "No Docker server certificates found.",
+            "details": "Docker server certificate permissions are incorrect.",
             "id": "3.10",
-            "raw_output": "[]",
+            "raw_output": "['0444', '0400']",
             "remediation": "chmod 444 /etc/docker/server*.pem",
             "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
+            "status": "FAIL",
             "title": "Ensure that Docker server certificate file permissions are set to 444 or more restrictively"
         },
         {
-            "details": "No Docker server keys found.",
+            "details": "Docker server key ownership is correct (root:root).",
             "id": "3.11",
-            "raw_output": "0 server key(s) found",
+            "raw_output": "1 server key(s) found",
             "remediation": "chown root:root /etc/docker/server*.key",
             "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
+            "status": "PASS",
             "title": "Ensure that the Docker server certificate key file ownership is set to root:root"
         },
         {
-            "details": "No Docker server keys found.",
+            "details": "Docker server key permissions are correct (400 or 600).",
             "id": "3.12",
-            "raw_output": "[]",
+            "raw_output": "['0400']",
             "remediation": "chmod 400 /etc/docker/server*.key",
             "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
+            "status": "PASS",
             "title": "Ensure that the Docker server certificate key file permissions are set to 400"
         },
         {
@@ -315,67 +375,7 @@
             "remediation": "chown root:root /etc/docker/daemon.json",
             "section": "Section 3 - Docker Daemon Configuration Files",
             "status": "PASS",
-            "title": "Ensure that the daemon.json file ownership is set to root:root"
-        },
-        {
-            "details": "daemon.json permissions are correct (644 or more restrictive).",
-            "id": "3.16",
-            "raw_output": "0644",
-            "remediation": "chmod 644 /etc/docker/daemon.json",
-            "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "PASS",
-            "title": "Ensure that daemon.json file permissions are set to 644 or more restrictive"
-        },
-        {
-            "details": "/etc/default/docker ownership is correct (root:root).",
-            "id": "3.17",
-            "raw_output": "root:root",
-            "remediation": "chown root:root /etc/default/docker",
-            "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "PASS",
-            "title": "Ensure that the /etc/default/docker file ownership is set to root:root"
-        },
-        {
-            "details": "/etc/default/docker permissions are correct (644 or more restrictive).",
-            "id": "3.18",
-            "raw_output": "0644",
-            "remediation": "chmod 644 /etc/default/docker",
-            "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "PASS",
-            "title": "Ensure that the /etc/default/docker file permissions are set to 644 or more restrictively"
-        },
-        {
-            "details": "/etc/sysconfig/docker does not exist.",
-            "id": "3.19",
-            "raw_output": "File does not exist",
-            "remediation": "chmod 644 /etc/sysconfig/docker",
-            "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
-            "title": "Ensure that the /etc/sysconfig/docker file permissions are set to 644 or more restrictively"
-        },
-        {
-            "details": "/etc/sysconfig/docker does not exist.",
-            "id": "3.20",
-            "raw_output": "File does not exist",
-            "remediation": "chown root:root /etc/sysconfig/docker",
-            "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "SKIP",
-            "title": "Ensure that the /etc/sysconfig/docker file ownership is set to root:root"
-        },
-        {
-            "details": "containerd socket ownership is correct (root:root).",
-            "id": "3.21",
-            "raw_output": "root:root",
-            "remediation": "chown root:root /run/containerd/containerd.sock",
-            "section": "Section 3 - Docker Daemon Configuration Files",
-            "status": "PASS",
-            "title": "Ensure that the Containerd socket file ownership is set to root:root"
-        },
-        {
-            "details": "containerd socket permissions are correct (660 or more restrictive).",
-            "id": "3.22",
-            "raw_output": "0660",
-            "remediation": "chmod 660 /run/containerd/containerd.sock",
+            "title": "Ensure that the daemon.json file ownership is set to root:root"   "remediation": "chmod 660 /run/containerd/containerd.sock",
             "section": "Section 3 - Docker Daemon Configuration Files",
             "status": "PASS",
             "title": "Ensure that the Containerd socket file permissions are set to 660 or more restrictively"

@@ -13,23 +13,75 @@
 # This playbook does not duplicate any audit logic – it imports the
 # existing playbooks under audit/ so the source of truth stays the same.
 
+- name: "Orchestration | Pre-flight cleanup on controller"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "Pre | Wipe stale fetched reports before audit run"
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../../audit/docker_benchmark_reports"
+        state: absent
+
+    - name: "Pre | Recreate clean reports directory"
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../../audit/docker_benchmark_reports"
+        state: directory
+        mode: '0755'
+
+- name: "Orchestration | Reset audit_results before Section 1"
+  hosts: docker
+  gather_facts: false
+  tasks:
+    - name: "Reset fact"
+      ansible.builtin.set_fact:
+        audit_results: []
+
 - name: "Orchestration | Section 1"
   ansible.builtin.import_playbook: ../../audit/auditSection1.yaml
+
+- name: "Orchestration | Reset audit_results before Section 2 & 3"
+  hosts: docker
+  gather_facts: false
+  tasks:
+    - name: "Reset fact"
+      ansible.builtin.set_fact:
+        audit_results: []
 
 - name: "Orchestration | Section 2 & 3"
   ansible.builtin.import_playbook: ../../audit/auditSection2_3.yml
 
+- name: "Orchestration | Reset audit_results before Section 4"
+  hosts: docker
+  gather_facts: false
+  tasks:
+    - name: "Reset fact"
+      ansible.builtin.set_fact:
+        audit_results: []
+
 - name: "Orchestration | Section 4"
   ansible.builtin.import_playbook: ../../audit/auditSection4.yml
+
+- name: "Orchestration | Reset audit_results before Section 5"
+  hosts: docker
+  gather_facts: false
+  tasks:
+    - name: "Reset fact"
+      ansible.builtin.set_fact:
+        audit_results: []
 
 - name: "Orchestration | Section 5"
   ansible.builtin.import_playbook: ../../audit/auditSection5.yml
 
+- name: "Orchestration | Reset audit_results before Section 6"
+  hosts: docker
+  gather_facts: false
+  tasks:
+    - name: "Reset fact"
+      ansible.builtin.set_fact:
+        audit_results: []
+
 - name: "Orchestration | Section 6"
   ansible.builtin.import_playbook: ../../audit/auditSection6.yaml
-
-- name: "Orchestration | Push all metrics to Pushgateway"
-  ansible.builtin.import_playbook: ../monitoring/push_all_reports.yml
 
 - name: "Orchestration | Evidence pipeline + reporting"
   hosts: localhost
@@ -38,7 +90,27 @@
     reports_dir: "{{ playbook_dir }}/../../audit/docker_benchmark_reports"
     evidence_store: "{{ playbook_dir }}/../evidence_pipeline/store/evidence.sqlite"
     report_output_dir: "{{ playbook_dir }}/../reporting/output"
+    sentinel_file: "{{ playbook_dir }}/../evidence_pipeline/store/.last_ingest"
   tasks:
+    - name: "Evidence | Stat sentinel file"
+      ansible.builtin.stat:
+        path: "{{ sentinel_file }}"
+      register: sentinel
+
+    - name: "Evidence | Get current epoch"
+      ansible.builtin.command: date +%s
+      register: current_epoch
+      changed_when: false
+
+    - name: "Evidence | Find reports newer than last ingest"
+      ansible.builtin.find:
+        paths: "{{ reports_dir }}"
+        patterns: "*_section*.json"
+        age: "{{ ('-' + ((current_epoch.stdout | int) - (sentinel.stat.mtime | int)) | string + 's') if sentinel.stat.exists else '-999d' }}"
+        age_stamp: mtime
+      register: fresh_reports
+      when: not (collect_skip | default(false) | bool)
+
     - name: "Evidence | Collect + normalize + store"
       ansible.builtin.command:
         cmd: >-

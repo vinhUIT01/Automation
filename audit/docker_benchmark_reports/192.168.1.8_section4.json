@@ -1,23 +1,23 @@
 {
     "meta": {
-        "fail": 0,
-        "generated": "2026-05-21T18:49:04Z",
+        "fail": 2,
+        "generated": "2026-05-28T13:04:50Z",
         "host": "Docker-2204-DA-AUTO",
-        "info": 8,
+        "info": 7,
         "os": "Ubuntu 22.04",
-        "pass": 1,
+        "pass": 3,
         "section": "Section 4 - Container Images and Build File",
-        "skip": 3,
+        "skip": 0,
         "total": 12,
         "warn": 0
     },
     "results": [
         {
-            "details": "[INFO] 4.1 - No containers running",
+            "details": "[FAIL] 4.1 - Containers running as root: 604a9ddde61b",
             "id": "4.1",
             "remediation": "Add a USER instruction to the Dockerfile with a non-root, non-zero UID. Example: RUN groupadd -r appgroup && useradd -r -g appgroup appuser USER appuser",
             "section": "4 - Container Images and Build File",
-            "status": "INFO",
+            "status": "FAIL",
             "title": "Ensure a user for the container has been created"
         },
         {
@@ -53,19 +53,19 @@
             "title": "Ensure Content trust for Docker is Enabled"
         },
         {
-            "details": "[SKIP] 4.6 - No local images found.",
+            "details": "[FAIL] 4.6 - Images missing HEALTHCHECK: 7aaca76c508f",
             "id": "4.6",
             "remediation": "Add a HEALTHCHECK instruction to every Dockerfile: HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/health || exit 1",
             "section": "4 - Container Images and Build File",
-            "status": "SKIP",
+            "status": "FAIL",
             "title": "Ensure HEALTHCHECK instructions have been added to container images"
         },
         {
-            "details": "[SKIP] 4.7 - No local images found.",
+            "details": "[PASS] 4.7 - No standalone update instructions found in image history.",
             "id": "4.7",
             "remediation": "Always combine RUN apt-get update with apt-get install in the same RUN instruction to prevent Docker layer cache from serving stale package lists: RUN apt-get update && apt-get install -y <packages>",
             "section": "4 - Container Images and Build File",
-            "status": "SKIP",
+            "status": "PASS",
             "title": "Ensure update instructions are not used alone in the Dockerfile"
         },
         {
@@ -76,11 +76,11 @@
             "title": "Ensure setuid and setgid permissions are removed in images"
         },
         {
-            "details": "[SKIP] 4.9 - No local images found.",
+            "details": "[PASS] 4.9 - No ADD instructions found. COPY used correctly.",
             "id": "4.9",
             "remediation": "Replace ADD with COPY in all Dockerfiles. ADD is only needed for: (1) auto-extracting tar archives, (2) fetching remote URLs. For everything else, COPY is explicit and safer.",
             "section": "4 - Container Images and Build File",
-            "status": "SKIP",
+            "status": "PASS",
             "title": "Ensure COPY is used instead of ADD in Dockerfiles"
         },
         {

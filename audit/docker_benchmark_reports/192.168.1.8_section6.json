@@ -1,7 +1,7 @@
 {
     "meta": {
         "fail": 0,
-        "generated": "2026-05-21T18:45:56Z",
+        "generated": "2026-05-28T13:05:33Z",
         "host": "Docker-2204-DA-AUTO",
         "info": 0,
         "os": "Ubuntu 22.04",
@@ -14,7 +14,7 @@
         {
             "details": "[PASS] 6.1 - No image sprawl detected. 1 active image(s), 1 total.",
             "id": "6.1",
-            "raw_output": "REPOSITORY:TAG   IMAGE ID       SIZE      CREATED\nnginx:latest     1881968aff6f   240MB     12 days ago",
+            "raw_output": "REPOSITORY:TAG   IMAGE ID       SIZE      CREATED\nnginx:latest     7aaca76c508f   161MB     5 days ago",
             "remediation": "Remove unused images regularly: docker image prune -a --filter until=720h Only keep images that are actively referenced by containers. Integrate image pruning into your CI/CD pipeline or run as a scheduled cron job.",
             "section": "Section 6 - Docker Security Operations",
             "status": "PASS",
@@ -23,7 +23,7 @@
         {
             "details": "[PASS] 6.2 - No stopped containers. 1 running, 0 stopped.",
             "id": "6.2",
-            "raw_output": "CONTAINER ID   IMAGE          STATUS                                 NAMES\nae6edb4c514a   nginx:latest   Up About a minute (health: starting)   my_container",
+            "raw_output": "CONTAINER ID   IMAGE          STATUS                            NAMES\n604a9ddde61b   nginx:latest   Up 2 minutes (health: starting)   my_container",
             "remediation": "Remove stopped containers that are no longer needed: docker container prune Prevent accumulation by always using --rm flag for one-off containers: docker run --rm <image> <command> Set up a scheduled prune job or integrate into your CI/CD cleanup stage.",
             "section": "Section 6 - Docker Security Operations",
             "status": "PASS",
